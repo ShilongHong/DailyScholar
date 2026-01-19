@@ -1,0 +1,27 @@
+# ArXiv论文推送系统 v3.0 依赖
+
+# Web框架
+fastapi>=0.115.0
+uvicorn>=0.32.0
+pydantic>=2.0.0
+
+# arXiv API解析
+feedparser>=6.0.0
+
+# 定时任务
+schedule>=1.2.0
+
+# 时区支持
+pytz>=2024.1
+
+# 钉钉推送
+alibabacloud-dingtalk>=2.0.0
+alibabacloud-tea-openapi>=0.3.0
+alibabacloud-tea-util>=0.3.0
+requests>=2.31.0
+
+# LLM调用
+openai>=1.0.0
+
+# MySQL数据库
+pymysql>=1.1.0

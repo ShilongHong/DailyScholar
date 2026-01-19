@@ -1,0 +1,18 @@
+# Normalize text files to LF
+* text=auto eol=lf
+
+# Windows specific files
+*.bat text eol=crlf
+
+# Ensure images are not treated as text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+
+# Ignore line endings in specific files
+.gitignore text eol=lf
+AGENTS.md text eol=lf
+CLAUDE.md text eol=lf
+README.md text eol=lf

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArXiv 论文推送系统 v3.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .line-clamp-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8; 
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1', // Indigo 500
+                        secondary: '#8b5cf6', // Violet 500
+                        success: '#10b981', // Emerald 500
+                        warning: '#f59e0b', // Amber 500
+                        danger: '#ef4444', // Red 500
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex overflow-hidden">
+    <div id="app" v-cloak class="flex w-full h-full">
+        
+        <!-- 侧边导航栏 -->
+        <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+            <div class="p-6 flex items-center gap-3 border-b border-gray-100">
+                <div class="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center text-white font-bold">
+                    <i class="ph ph-book-open-text text-xl"></i>
+                </div>
+                <h1 class="font-bold text-lg tracking-tight text-gray-900">Paper2Data</h1>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+                <a href="#" @click.prevent="currentView = 'dashboard'" 
+                   :class="['flex items-center gap-3 px-4 py-3 rounded-lg transition-colors', currentView === 'dashboard' ? 'bg-primary/10 text-primary font-medium' : 'text-gray-600 hover:bg-gray-50']">
+                    <i class="ph ph-squares-four text-xl"></i>
+                    仪表盘
+                </a>
+                <a href="#" @click.prevent="currentView = 'papers'" 
+                   :class="['flex items-center gap-3 px-4 py-3 rounded-lg transition-colors', currentView === 'papers' ? 'bg-primary/10 text-primary font-medium' : 'text-gray-600 hover:bg-gray-50']">
+                    <i class="ph ph-article text-xl"></i>
+                    论文列表
+                </a>
+                <a href="#" @click.prevent="currentView = 'queue'" 
+                   :class="['flex items-center gap-3 px-4 py-3 rounded-lg transition-colors', currentView === 'queue' ? 'bg-primary/10 text-primary font-medium' : 'text-gray-600 hover:bg-gray-50']">
+                    <i class="ph ph-queue text-xl"></i>
+                    推送队列
+                    <span v-if="queueStatus.size > 0" class="ml-auto bg-primary text-white text-xs px-2 py-0.5 rounded-full">{{ queueStatus.size }}</span>
+                </a>
+                <a href="#" @click.prevent="currentView = 'config'" 
+                   :class="['flex items-center gap-3 px-4 py-3 rounded-lg transition-colors', currentView === 'config' ? 'bg-primary/10 text-primary font-medium' : 'text-gray-600 hover:bg-gray-50']">
+                    <i class="ph ph-gear text-xl"></i>
+                    系统配置
+                </a>
+            </nav>
+
+            <div class="p-4 border-t border-gray-100">
+                <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+                    <div class="flex justify-between mb-1">
+                        <span>版本</span>
+                        <span class="font-medium">v3.0.0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>状态</span>
+                        <span class="flex items-center gap-1 text-success font-medium">
+                            <span class="w-1.5 h-1.5 rounded-full bg-success"></span>
+                            运行中
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden relative">
+            <!-- 顶部栏 -->
+            <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm z-10">
+                <h2 class="text-xl font-semibold text-gray-800">{{ viewTitle }}</h2>
+                <div class="flex items-center gap-4">
+                    <button @click="refreshAll" class="p-2 text-gray-500 hover:text-primary hover:bg-gray-50 rounded-full transition-colors" title="刷新数据">
+                        <i class="ph ph-arrows-clockwise text-xl" :class="{'animate-spin': loading}"></i>
+                    </button>
+                    <div class="h-8 w-px bg-gray-200"></div>
+                    <div class="flex gap-2">
+                        <button @click="triggerAction('fetch')" :disabled="actionLoading" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center gap-2">
+                            <i class="ph ph-download-simple"></i>
+                            立即获取
+                        </button>
+                        <button @click="triggerAction('push')" :disabled="actionLoading" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm shadow-primary/30">
+                            <i class="ph ph-paper-plane-right"></i>
+                            立即推送
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 内容滚动区 -->
+            <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
+                
+                <!-- 仪表盘视图 -->
+                <div v-if="currentView === 'dashboard'" class="space-y-6 max-w-7xl mx-auto">
+                    <!-- 统计卡片 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">今日获取</p>
+                                    <h3 class="text-3xl font-bold text-gray-900">{{ stats.today_raw || 0 }}</h3>
+                                </div>
+                                <div class="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                                    <i class="ph ph-download-simple text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">今日筛选相关</p>
+                                    <h3 class="text-3xl font-bold text-gray-900">{{ stats.today_relevant || 0 }}</h3>
+                                </div>
+                                <div class="p-2 bg-green-50 text-green-600 rounded-lg">
+                                    <i class="ph ph-check-circle text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">待推送队列</p>
+                                    <h3 class="text-3xl font-bold text-gray-900">{{ queueStatus.size || 0 }}</h3>
+                                </div>
+                                <div class="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                                    <i class="ph ph-queue text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">总收录论文</p>
+                                    <h3 class="text-3xl font-bold text-gray-900">{{ stats.total_relevant || 0 }}</h3>
+                                </div>
+                                <div class="p-2 bg-orange-50 text-orange-600 rounded-lg">
+                                    <i class="ph ph-database text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 图表区域 -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-semibold text-gray-800 mb-4">星级分布</h3>
+                            <div class="h-64 flex items-center justify-center">
+                                <canvas id="starsChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-semibold text-gray-800 mb-4">系统状态</h3>
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span class="text-sm text-gray-600">调度器</span>
+                                    <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">运行中</span>
+                                </div>
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span class="text-sm text-gray-600">数据库</span>
+                                    <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">已连接</span>
+                                </div>
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <span class="text-sm text-gray-600">LLM服务</span>
+                                    <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">就绪</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 论文列表视图 -->
+                <div v-if="currentView === 'papers'" class="space-y-4 max-w-7xl mx-auto">
+                    <!-- 筛选栏 -->
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center justify-between">
+                        <div class="flex items-center gap-4 flex-1">
+                            <div class="relative flex-1 max-w-md">
+                                <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                <input v-model="searchQuery" type="text" placeholder="搜索标题、作者..." class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                            </div>
+                            <select v-model="filterStars" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                <option value="0">所有星级</option>
+                                <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                                <option value="4">⭐⭐⭐⭐ (4+)</option>
+                                <option value="3">⭐⭐⭐ (3+)</option>
+                            </select>
+                            <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                                <input type="checkbox" v-model="filterMarked" class="rounded text-primary focus:ring-primary">
+                                仅看已标记
+                            </label>
+                        </div>
+                        <div class="text-sm text-gray-500">
+                            共 {{ filteredPapers.length }} 篇论文
+                        </div>
+                    </div>
+
+                    <!-- 列表 -->
+                    <div class="space-y-3">
+                        <div v-for="paper in filteredPapers" :key="paper.DOI" 
+                             @click="openDrawer(paper)"
+                             class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group relative">
+                            
+                            <div class="flex justify-between items-start gap-4">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded border border-blue-100">{{ paper.PublicationYear }}</span>
+                                        <span class="flex text-yellow-400 text-sm">
+                                            <i v-for="n in 5" :key="n" :class="n <= paper.Stars ? 'ph-fill ph-star' : 'ph ph-star text-gray-300'"></i>
+                                        </span>
+                                        <span v-if="paper.is_marked" class="text-red-500 text-xs flex items-center gap-1">
+                                            <i class="ph-fill ph-heart"></i> 已标记
+                                        </span>
+                                    </div>
+                                    <h3 class="font-semibold text-gray-900 text-lg mb-1 group-hover:text-primary transition-colors line-clamp-2">{{ paper.TitleCN || paper.Title }}</h3>
+                                    <p class="text-sm text-gray-500 mb-3 line-clamp-1">{{ paper.Author }}</p>
+                                    <p class="text-sm text-gray-600 line-clamp-2">{{ paper.RelevanceReason }}</p>
+                                </div>
+                                <div class="flex flex-col gap-2">
+                                    <button @click.stop="toggleMark(paper)" class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-500 transition-colors">
+                                        <i :class="paper.is_marked ? 'ph-fill ph-heart text-red-500' : 'ph ph-heart'"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 空状态 -->
+                        <div v-if="filteredPapers.length === 0" class="text-center py-12 text-gray-500">
+                            <i class="ph ph-files text-4xl mb-2 opacity-50"></i>
+                            <p>没有找到符合条件的论文</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 队列视图 -->
+                <div v-if="currentView === 'queue'" class="max-w-4xl mx-auto">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                            <h3 class="font-semibold text-gray-800">待推送列表</h3>
+                            <span class="text-sm text-gray-500">{{ queueStatus.size }} 篇等待中</span>
+                        </div>
+                        <div class="divide-y divide-gray-100">
+                            <div v-for="(paper, index) in queueStatus.preview" :key="index" class="p-4 hover:bg-gray-50 flex items-center gap-4">
+                                <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-medium text-sm">
+                                    {{ index + 1 }}
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="font-medium text-gray-900 line-clamp-1">{{ paper.title }}</h4>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="flex text-yellow-400 text-xs">
+                                            <i v-for="n in 5" :key="n" :class="n <= paper.stars ? 'ph-fill ph-star' : 'ph ph-star text-gray-300'"></i>
+                                        </span>
+                                        <span class="text-xs text-gray-500">{{ paper.reason }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="queueStatus.size === 0" class="p-8 text-center text-gray-500">
+                                队列为空
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 配置视图 -->
+                <div v-if="currentView === 'config'" class="max-w-4xl mx-auto">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+                        <i class="ph ph-gear text-4xl text-gray-300 mb-4"></i>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">配置功能开发中</h3>
+                        <p class="text-gray-500">目前请通过修改 config.py 文件来调整配置。</p>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- 侧边抽屉 (Drawer) -->
+        <div v-if="drawerOpen" class="fixed inset-0 z-50 flex justify-end" role="dialog">
+            <!-- 背景遮罩 -->
+            <div class="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity" @click="closeDrawer"></div>
+            
+            <!-- 抽屉内容 -->
+            <div class="relative w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col animate-slide-in-right">
+                <!-- 抽屉头部 -->
+                <div class="p-6 border-b border-gray-100 flex items-start justify-between bg-gray-50/50">
+                    <div class="flex-1 pr-8">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full">
+                                {{ selectedPaper.PublicationYear }}
+                            </span>
+                            <span class="flex text-yellow-400 text-sm">
+                                <i v-for="n in 5" :key="n" :class="n <= selectedPaper.Stars ? 'ph-fill ph-star' : 'ph ph-star text-gray-300'"></i>
+                            </span>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-900 leading-snug mb-2">
+                            {{ selectedPaper.TitleCN || selectedPaper.Title }}
+                        </h2>
+                        <h3 class="text-sm text-gray-500 font-medium leading-relaxed">
+                            {{ selectedPaper.Title }}
+                        </h3>
+                    </div>
+                    <button @click="closeDrawer" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+                        <i class="ph ph-x text-xl"></i>
+                    </button>
+                </div>
+
+                <!-- 抽屉主体 -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-8">
+                    
+                    <!-- 推荐理由 -->
+                    <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <h4 class="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                            <i class="ph ph-thumbs-up"></i> 推荐理由
+                        </h4>
+                        <p class="text-sm text-blue-900/80 leading-relaxed">
+                            {{ selectedPaper.RelevanceReason }}
+                        </p>
+                    </div>
+
+                    <!-- 潜在帮助 -->
+                    <div v-if="selectedPaper.PotentialHelp" class="bg-green-50/50 p-4 rounded-xl border border-green-100">
+                        <h4 class="text-sm font-semibold text-green-800 mb-2 flex items-center gap-2">
+                            <i class="ph ph-lightbulb"></i> 潜在帮助
+                        </h4>
+                        <p class="text-sm text-green-900/80 leading-relaxed">
+                            {{ selectedPaper.PotentialHelp }}
+                        </p>
+                    </div>
+
+                    <!-- 摘要 -->
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">中文摘要</h4>
+                        <p class="text-gray-700 leading-relaxed text-justify">
+                            {{ selectedPaper.AbstractCN || '暂无翻译' }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">英文摘要</h4>
+                        <p class="text-gray-600 leading-relaxed text-justify text-sm font-light">
+                            {{ selectedPaper.Abstract }}
+                        </p>
+                    </div>
+
+                    <!-- 元数据 -->
+                    <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+                        <div>
+                            <span class="text-xs text-gray-500 block mb-1">作者</span>
+                            <span class="text-sm text-gray-800">{{ selectedPaper.Author }}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-gray-500 block mb-1">机构</span>
+                            <span class="text-sm text-gray-800">{{ selectedPaper.Affiliation || '-' }}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-gray-500 block mb-1">DOI</span>
+                            <span class="text-sm text-gray-800 font-mono">{{ selectedPaper.DOI }}</span>
+                        </div>
+                        <div>
+                            <span class="text-xs text-gray-500 block mb-1">来源</span>
+                            <span class="text-sm text-gray-800">{{ selectedPaper.Source }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 抽屉底部 -->
+                <div class="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                    <a :href="selectedPaper.PDFLink || selectedPaper.Link" target="_blank" class="flex-1 bg-primary text-white text-center py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
+                        <i class="ph ph-file-pdf"></i> 阅读原文
+                    </a>
+                    <button @click="toggleMark(selectedPaper)" :class="['flex-1 py-2.5 rounded-lg font-medium border transition-colors flex items-center justify-center gap-2', selectedPaper.is_marked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50']">
+                        <i :class="selectedPaper.is_marked ? 'ph-fill ph-heart' : 'ph ph-heart'"></i>
+                        {{ selectedPaper.is_marked ? '取消标记' : '标记论文' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 消息提示 -->
+        <div class="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
+            <div v-for="msg in messages" :key="msg.id" 
+                 :class="['px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium flex items-center gap-2 animate-fade-in-up', msg.type === 'success' ? 'bg-gray-800' : 'bg-red-500']">
+                <i :class="msg.type === 'success' ? 'ph ph-check-circle' : 'ph ph-warning-circle'"></i>
+                {{ msg.text }}
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                const currentView = ref('dashboard');
+                const papers = ref([]);
+                const stats = ref({});
+                const queueStatus = ref({ size: 0, preview: [] });
+                const loading = ref(false);
+                const actionLoading = ref(false);
+                const drawerOpen = ref(false);
+                const selectedPaper = ref({});
+                const messages = ref([]);
+                
+                // 筛选状态
+                const searchQuery = ref('');
+                const filterStars = ref('0');
+                const filterMarked = ref(false);
+
+                const viewTitle = computed(() => {
+                    const map = {
+                        'dashboard': '仪表盘',
+                        'papers': '论文列表',
+                        'queue': '推送队列',
+                        'config': '系统配置'
+                    };
+                    return map[currentView.value];
+                });
+
+                const filteredPapers = computed(() => {
+                    return papers.value.filter(p => {
+                        const matchSearch = !searchQuery.value || 
+                            (p.Title && p.Title.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
+                            (p.TitleCN && p.TitleCN.includes(searchQuery.value)) ||
+                            (p.Author && p.Author.toLowerCase().includes(searchQuery.value.toLowerCase()));
+                        
+                        const matchStars = filterStars.value === '0' || p.Stars >= parseInt(filterStars.value);
+                        const matchMarked = !filterMarked.value || p.is_marked;
+
+                        return matchSearch && matchStars && matchMarked;
+                    });
+                });
+
+                // API 调用
+                const fetchPapers = async () => {
+                    try {
+                        const res = await fetch('/api/papers?limit=100');
+                        const data = await res.json();
+                        if (data.success) {
+                            papers.value = data.data;
+                        }
+                    } catch (e) {
+                        showToast('获取论文列表失败', 'error');
+                    }
+                };
+
+                const fetchStats = async () => {
+                    try {
+                        const res = await fetch('/api/papers/stats');
+                        const data = await res.json();
+                        if (data.success) {
+                            stats.value = data.data;
+                            updateChart();
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const fetchQueue = async () => {
+                    try {
+                        const res = await fetch('/api/queue/status');
+                        const data = await res.json();
+                        if (data.success) {
+                            queueStatus.value = data.data;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const triggerAction = async (action) => {
+                    if (actionLoading.value) return;
+                    actionLoading.value = true;
+                    const url = action === 'fetch' ? '/api/actions/fetch-now' : '/api/actions/push-now';
+                    const text = action === 'fetch' ? '获取任务' : '推送任务';
+                    
+                    try {
+                        const res = await fetch(url, { method: 'POST' });
+                        const data = await res.json();
+                        if (data.success) {
+                            showToast(`${text}已触发`);
+                            setTimeout(refreshAll, 2000);
+                        } else {
+                            showToast(data.message || '操作失败', 'error');
+                        }
+                    } catch (e) {
+                        showToast('网络请求失败', 'error');
+                    } finally {
+                        actionLoading.value = false;
+                    }
+                };
+
+                const toggleMark = async (paper) => {
+                    const newStatus = !paper.is_marked;
+                    // 乐观更新
+                    paper.is_marked = newStatus;
+                    
+                    try {
+                        const res = await fetch('/api/papers/mark', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ doi: paper.DOI, marked: newStatus })
+                        });
+                        const data = await res.json();
+                        if (!data.success) {
+                            throw new Error('Failed');
+                        }
+                        showToast(newStatus ? '已标记' : '已取消标记');
+                    } catch (e) {
+                        paper.is_marked = !newStatus; // 回滚
+                        showToast('操作失败', 'error');
+                    }
+                };
+
+                // 交互逻辑
+                const openDrawer = (paper) => {
+                    selectedPaper.value = paper;
+                    drawerOpen.value = true;
+                };
+
+                const closeDrawer = () => {
+                    drawerOpen.value = false;
+                };
+
+                const refreshAll = async () => {
+                    loading.value = true;
+                    await Promise.all([fetchStats(), fetchQueue(), fetchPapers()]);
+                    loading.value = false;
+                };
+
+                const showToast = (text, type = 'success') => {
+                    const id = Date.now();
+                    messages.value.push({ id, text, type });
+                    setTimeout(() => {
+                        messages.value = messages.value.filter(m => m.id !== id);
+                    }, 3000);
+                };
+
+                // 图表
+                let chartInstance = null;
+                const updateChart = () => {
+                    const ctx = document.getElementById('starsChart');
+                    if (!ctx || !stats.value.by_stars) return;
+
+                    if (chartInstance) chartInstance.destroy();
+
+                    const labels = ['5星', '4星', '3星', '2星', '1星'];
+                    const data = [5, 4, 3, 2, 1].map(s => stats.value.by_stars[s] || 0);
+
+                    chartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: '论文数量',
+                                data: data,
+                                backgroundColor: [
+                                    '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe'
+                                ],
+                                borderRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false }
+                            },
+                            scales: {
+                                y: { beginAtZero: true, grid: { display: false } },
+                                x: { grid: { display: false } }
+                            }
+                        }
+                    });
+                };
+
+                onMounted(() => {
+                    refreshAll();
+                    // 自动刷新
+                    setInterval(fetchQueue, 30000);
+                });
+
+                // 监听视图切换以渲染图表
+                watch(currentView, (newVal) => {
+                    if (newVal === 'dashboard') {
+                        setTimeout(updateChart, 100);
+                    }
+                });
+
+                return {
+                    currentView, viewTitle, papers, stats, queueStatus,
+                    loading, actionLoading, drawerOpen, selectedPaper, messages,
+                    searchQuery, filterStars, filterMarked, filteredPapers,
+                    fetchPapers, triggerAction, toggleMark, openDrawer, closeDrawer, refreshAll
+                };
+            }
+        }).mount('#app');
+    </script>
+    <style>
+        @keyframes slide-in-right {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        .animate-slide-in-right {
+            animation: slide-in-right 0.3s ease-out;
+        }
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up {
+            animation: fade-in-up 0.3s ease-out;
+        }
+    </style>
+</body>
+</html>
