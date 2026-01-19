@@ -1,189 +1,127 @@
-# ArXiv论文推送系统 v3.0 - 三合一版
+# ArXiv 论文推送系统 v3.0 (三合一版)
 
-一个命令启动：**后端API + 前端页面 + 定时调度**
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-orange.svg)](https://www.mysql.com/)
+
+一个集成化的学术论文自动化追踪系统。单进程同时运行 **后端API**、**定时调度器** 和 **前端静态服务**。
+
+核心工作流：`arXiv API` -> `MySQL` -> `LLM 智能筛选` -> `中英翻译` -> `钉钉推送`
+
+---
+
+## ✨ 核心特性
+
+- **三合一架构**：无需配置 Nginx 或 Supervisor，直接运行 `python app.py` 即可启动所有服务。
+- **智能筛选**：基于 LLM (DeepSeek/OpenAI) 对论文进行深度理解和打分，只推送真正相关的论文。
+- **个性化定制**：通过自然语言描述 `RESEARCH_DESCRIPTION` 定义你的研究兴趣。
+- **自动化工作流**：
+  - 自动抓取最新论文
+  - 自动重试失败任务
+  - 自动推送至钉钉群
+- **完善的后台管理**：提供 RESTful API 和 Swagger 文档，方便管理和监控。
 
 ## 📁 项目结构
 
 ```
 daliy_paper_v3/
-├── app.py              # 主程序（三合一）
-├── config.py           # 配置文件
-├── requirements.txt    # Python依赖
-├── services/           # 业务服务模块
-│   ├── __init__.py
-│   ├── arxiv_service.py
-│   ├── llm_filter_service.py
-│   ├── translation_service.py
-│   ├── dingtalk_service.py
-│   ├── paper_queue_service.py
-│   └── mysql_service.py
-├── static/             # 前端静态文件（构建后复制到这里）
-├── logs/               # 日志目录
-└── output/             # 输出目录
+├── app.py                  # 系统主入口
+├── config.py               # 配置文件（需从 config.demo.py 复制）
+├── requirements.txt        # 依赖列表
+├── services/               # 核心业务逻辑
+│   ├── arxiv_service.py    # arXiv 抓取
+│   ├── llm_filter_service.py # LLM 评分
+│   └── ...
+├── tools/                  # 运维工具脚本
+│   ├── rebuild_queue.py    # 重建推送队列
+│   └── rescore_papers.py   # 重新评分工具
+├── static/                 # 前端静态资源
+├── logs/                   # 运行日志
+└── output/                 # 数据导出目录
 ```
 
 ## 🚀 快速开始
 
-### 1. 安装依赖
+### 1. 环境准备
+- Python 3.8 或更高版本
+- MySQL 数据库
 
+### 2. 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置
+### 3. 配置文件
+复制示例配置并修改：
+```bash
+cp config.demo.py config.py
+```
 
-编辑 `config.py`，填写：
-- MySQL数据库连接信息
-- 钉钉推送配置
-- LLM API Key
-- arXiv关键词
+**关键配置项 (`config.py`)**:
+- `RESEARCH_DESCRIPTION`: **最重要的配置**。用自然语言详细描述你的研究方向，LLM 将以此为基准进行论文筛选。
+- `ARXIV_CONFIG`: 配置 arXiv 搜索关键词 (如 `cs.CL`, `cs.CV`)。
+- `LLM_FILTER_CONFIG`: 配置 LLM API (支持 DeepSeek, OpenAI 等兼容接口)。
+- `DINGTALK_CONFIG`: 配置钉钉机器人的 Access Token 和 Secret。
+- `SCHEDULE_CONFIG`: 调整抓取和推送的定时任务时间。
 
-### 3. 启动
-
+### 4. 启动服务
 ```bash
 python app.py
 ```
-
-访问地址：
-- 前端页面: http://localhost:20001
-- API文档: http://localhost:20001/docs
-
-## 📦 部署前端
-
-### 方法1：从旧项目复制
-```bash
-# 在 daliy_paper/web/frontend 目录
-npm install
-npm run build
-
-# 复制到v3的static目录
-cp -r dist/* ../daliy_paper_v3/static/
+启动成功后，控制台将显示：
+```
+╔══════════════════════════════════════════════════════════╗
+║         ArXiv论文推送系统 v3.0 - 三合一版                ║
+║  端口：20001                                             ║
+║  文档：http://localhost:20001/docs                       ║
+╚══════════════════════════════════════════════════════════╝
 ```
 
-### 方法2：直接使用API
-如果没有前端，直接访问 `/docs` 使用Swagger UI
+## 🖥️ 访问服务
 
-## 🖥️ 服务器部署（宝塔）
+- **Web 界面**: [http://localhost:20001](http://localhost:20001)
+- **API 文档**: [http://localhost:20001/docs](http://localhost:20001/docs)
+- **健康检查**: [http://localhost:20001/api/health](http://localhost:20001/api/health)
 
-### 1. 上传项目
-将 `daliy_paper_v3` 文件夹上传到服务器，如 `/www/wwwroot/daliy_paper_v3`
+## 🛠️ 运维工具 (`tools/`)
 
-### 2. 安装依赖
-```bash
-cd /www/wwwroot/daliy_paper_v3
-pip3 install -r requirements.txt
-```
+项目在 `tools/` 目录下提供了一系列实用脚本：
 
-### 3. 使用Python项目管理器
+- `rebuild_queue.py`: 清空并重建待推送队列。
+- `rescore_papers.py`: 使用新的 Prompt 或逻辑重新评估已抓取的论文。
+- `fix_created_at.py`: 修复数据库中的时间字段问题。
+- `reset_processed_2026.py`: 重置特定日期的处理状态（用于调试）。
 
-在宝塔面板 → 网站 → Python项目 → 添加项目：
+## 📦 部署指南（宝塔面板）
 
-| 配置项 | 值 |
-|-------|-----|
-| 项目名称 | paper-system |
-| 项目路径 | /www/wwwroot/daliy_paper_v3 |
-| 端口 | 20001 |
-| 启动命令 | python3 app.py |
-
-### 4. 配置反向代理（可选）
-
-如果想用域名访问，添加反向代理：
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:20001;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-}
-```
-
-### 5. 放行端口
-
-在宝塔面板 → 安全 → 放行20001端口
-
-## 🎯 API接口
-
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/health` | GET | 健康检查 |
-| `/api/papers` | GET | 获取论文列表 |
-| `/api/papers/stats` | GET | 获取统计数据 |
-| `/api/queue/status` | GET | 队列状态 |
-| `/api/config/all` | GET | 获取所有配置 |
-| `/api/config/{name}` | PUT | 更新配置 |
-| `/api/scheduler/status` | GET | 调度器状态 |
-| `/api/actions/fetch-now` | POST | 立即获取论文 |
-| `/api/actions/push-now` | POST | 立即推送论文 |
-
-## ⏰ 定时任务
-
-启动后自动运行调度器：
-- **论文获取**: 每天凌晨02:00
-- **论文推送**: 每天09:00和14:30
-
-可通过API或修改 `config.py` 调整时间。
-
-## 🔧 配置说明
-
-### config.py 主要配置
-
-```python
-# 调度配置
-SCHEDULE_CONFIG = {
-    'fetch_papers': {
-        'enable': True,
-        'time': '02:00',      # 获取时间
-    },
-    'push_papers': {
-        'enable': True,
-        'times': ['09:00', '14:30'],  # 推送时间
-        'max_papers_per_push': 5,     # 每次推送数量
-    },
-}
-
-# MySQL配置
-ARXIV_CONFIG = {
-    'mysql': {
-        'enable': True,
-        'host': 'your-host',
-        'port': 3306,
-        'user': 'your-user',
-        'password': 'your-password',
-        'database': 'your-database',
-    },
-}
-```
-
-## 📝 日志
-
-日志文件位于 `logs/` 目录：
-- `app_YYYYMMDD.log` - 每天一个日志文件
+1. **上传项目**: 将代码上传至 `/www/wwwroot/daliy_paper_v3`。
+2. **安装依赖**: 在项目目录下运行 `pip install -r requirements.txt`。
+3. **添加 Python 项目**:
+   - 路径: `/www/wwwroot/daliy_paper_v3`
+   - 启动文件: `app.py`
+   - 端口: `20001`
+4. **放行端口**: 在防火墙/安全组中放行 `20001` 端口。
+5. **(可选) 反向代理**:
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:20001;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+   }
+   ```
 
 ## ❓ 常见问题
 
-### Q: 如何测试推送？
-```bash
-curl -X POST http://localhost:20001/api/actions/push-now
-```
+**Q: 如何手动触发抓取或推送？**
+A: 使用 API 接口：
+- 抓取: `POST /api/actions/fetch-now`
+- 推送: `POST /api/actions/push-now`
 
-### Q: 如何查看队列？
-```bash
-curl http://localhost:20001/api/queue/status
-```
+**Q: 数据库表需要手动创建吗？**
+A: 不需要。系统启动时会自动检测并创建所需的数据库表结构 (`papers_raw`, `papers_relevant` 等)。
 
-### Q: 前端页面404？
-确保 `static/index.html` 文件存在。没有前端时可以直接访问 `/docs`。
-
-### Q: 如何后台运行？
-使用 nohup 或 systemd：
-```bash
-nohup python3 app.py > /dev/null 2>&1 &
-```
-
-或者使用宝塔的Python项目管理器自动管理。
+**Q: 前端页面显示 404？**
+A: 请确保已将前端构建产物（`dist` 目录内容）复制到 `static/` 目录下。如果没有前端代码，可以直接使用 Swagger UI (`/docs`) 进行操作。
 
 ---
-
-**Version**: 3.0.0 - 三合一版  
-**特点**: 单文件运行，部署简单
+**Version**: 3.0.0
