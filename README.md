@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > **告别信息过载。** 让 AI 帮您阅读每天的 ArXiv 论文，只把真正值得读的推送到您面前。
-> 基于CLaude Sonnet生成
+> 基于opencode的CLaude Sonnet和Gemini3 Pro生成
 
 Paper2Data 是一个**开箱即用**的科研辅助系统。它集成了数据抓取、LLM 智能筛选、自动翻译和钉钉推送功能，并提供了一个现代化的 Web 界面来管理这一切。
 
