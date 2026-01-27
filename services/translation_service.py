@@ -48,7 +48,7 @@ class TranslationService:
         
         self.model = self.config.get('model', 'gpt-3.5-turbo')
         self.temperature = 0.3
-        self.max_tokens = 1000
+        self.max_tokens = 4096
         
         logger.info("TranslationService初始化完成")
     
