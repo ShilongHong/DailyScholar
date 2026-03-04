@@ -688,8 +688,9 @@ async def retranslate_paper_endpoint(doi: str):
 
         paper = papers[0]
 
-        # 重新翻译
-        translation_service = TranslationService()
+        # 重新翻译 - 使用运行时配置
+        llm_config = get_config("llm_filter")
+        translation_service = TranslationService(config=llm_config)
         translated_paper = translation_service.translate_paper(paper)
 
         # 更新数据库

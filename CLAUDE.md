@@ -25,6 +25,22 @@ python app.py
 # - Health check: http://localhost:20001/api/health
 ```
 
+### Testing
+No automated tests currently exist. For manual verification, use API endpoints:
+```bash
+# Test fetching papers
+curl -X POST http://localhost:20001/api/actions/fetch-now
+
+# Test pushing papers
+curl -X POST http://localhost:20001/api/actions/push-now
+```
+
+If adding tests, install pytest and create tests in `test/`:
+```bash
+pip install pytest
+pytest test/
+```
+
 ## Architecture
 
 ### Data Flow Pipeline
@@ -41,14 +57,17 @@ arXiv API → papers_raw (MySQL) → LLM Filter → Translation → papers_relev
 | [translation_service.py](services/translation_service.py) | Chinese/English translation | Translates titles and abstracts |
 | [mysql_service.py](services/mysql_service.py) | Database operations | Thread-safe connections via `threading.local()`, auto-migration |
 | [dingtalk_http_service.py](services/dingtalk_http_service.py) | DingTalk notifications | **Preferred over SDK version** |
+| [dingtalk_service.py](services/dingtalk_service.py) | DingTalk SDK version | Legacy, prefer HTTP version |
 | [paper_queue_service.py](services/paper_queue_service.py) | Push queue management | Prevents duplicate notifications |
 
 ### Key Design Patterns
 
 **1. Configuration Hierarchy** (lowest to highest priority):
 - [config.py](config.py) - Default values
-- `runtime_config.json` - Runtime overrides (legacy)
-- Database `system_config` table - Highest priority
+- `runtime_config.json` - Runtime overrides (legacy, deprecated)
+- Database `system_config` table - Highest priority, takes precedence over all
+
+To update config at runtime, use API endpoints `/api/config/{name}` - these persist to the database.
 
 **2. Thread-Safe Database**: MySQL uses `threading.local()` for per-thread connection pooling. Always use:
 ```python
@@ -74,8 +93,6 @@ conn.commit()
 - `LLM_FILTER_CONFIG['min_score']`: Relevance threshold (default: 60/100)
 - `SCHEDULE_CONFIG`: Fetch time (02:00) and push times (09:00, 14:30)
 
-**Runtime Config Updates**: Use API endpoints at `/api/config/{name}` - updates persist to database.
-
 ## API Conventions
 
 - All API routes prefixed with `/api/`
@@ -91,6 +108,14 @@ conn.commit()
 - `system_config`: Runtime configuration storage
 
 **Important**: The `Stars` column stores 0-100 scores (not 1-5 stars) for backwards compatibility.
+
+## Code Style
+
+- **Comments & Docstrings**: Must be in **Chinese (Simplified)**
+- **Log Messages**: Must be in **Chinese (Simplified)**
+- **Variable/Function Names**: English `snake_case` (e.g., `get_paper_list`)
+- **Class Names**: English `CamelCase` (e.g., `ArxivService`)
+- **Indentation**: 4 spaces (PEP 8)
 
 ## Development Guidelines
 
@@ -109,15 +134,19 @@ conn.commit()
 Edit `_build_evaluation_prompt()` in [llm_filter_service.py](services/llm_filter_service.py:70). The system uses 100-point scoring where 60+ indicates relevance.
 
 ### Rescoring Papers
-The project includes a rescore utility (check for `rescore_papers.py` in root) with options:
+The project includes a rescore utility in [tools/rescore_papers.py](tools/rescore_papers.py) with options:
 - `--dry-run`: Preview changes without database updates
 - `--convert-only`: Convert legacy 5-star ratings to 100-point scale
 - `--workers N`: Set parallel worker count
+- `--limit N`: Limit number of papers to process
 
 ### Other Maintenance Scripts
-- `re_evaluate_failed.py`: Re-evaluates papers where LLM scoring failed (papers with "评估失败" in RelevanceReason)
-- `rebuild_queue.py`: Clears and rebuilds paper_queue from papers_relevant with Stars >= 60
-- `reset_processed_2026.py`, `fix_created_at.py`: One-time migration scripts
+
+Located in [tools/](tools/) directory:
+- [rebuild_queue.py](tools/rebuild_queue.py): Clears and rebuilds paper_queue from papers_relevant with Stars >= 60
+- [re_evaluate_failed.py](tools/re_evaluate_failed.py): Re-evaluates papers where LLM scoring failed (papers with "评估失败" in RelevanceReason)
+- [reset_processed_2026.py](tools/reset_processed_2026.py): Reset processing status for reprocessing
+- [fix_created_at.py](tools/fix_created_at.py): Data consistency fixes for created_at timestamps
 
 ## Manual Operations
 
@@ -153,3 +182,4 @@ Reload scheduler after config changes: `POST /api/scheduler/reload`
 - ArXiv integration: [services/arxiv_service.py](services/arxiv_service.py)
 - LLM filtering: [services/llm_filter_service.py](services/llm_filter_service.py)
 - Database operations: [services/mysql_service.py](services/mysql_service.py)
+- Frontend (Vue3 SPA): [static/index.html](static/index.html)
