@@ -181,6 +181,15 @@ open-source implementation, reproducible
                 )
                 
                 result = self._parse_response(response.choices[0].message.content)
+                
+                # 记录成功的响应（调试用）
+                raw_content = response.choices[0].message.content
+                if len(raw_content) > 200:
+                    debug_preview = raw_content[:200] + "..."
+                else:
+                    debug_preview = raw_content
+                logger.debug(f"LLM响应预览: {debug_preview}")
+                
                 logger.debug(f"论文 '{paper['Title'][:50]}...' 评分: {result['score']}分")
                 return result
                 
@@ -274,6 +283,13 @@ open-source implementation, reproducible
 
 请严格按以下JSON格式输出（不要有其他内容）：
 
+**重要格式要求**：
+- 所有键名必须用双引号包裹（例如："total_score"）
+- 所有字符串值必须用双引号包裹（例如："reason"）
+- 不要使用单引号，不要使用无引号的键名
+- 不要添加注释（// 或 /* */）
+- 尾部不要有多余的逗号
+
 ```json
 {{
   "dimensions": {{
@@ -313,7 +329,10 @@ open-source implementation, reproducible
                 end = response_text.find('```', start)
                 response_text = response_text[start:end].strip()
             
-            result = json.loads(response_text)
+            # 清理和标准化JSON（处理LLM返回的非标准格式）
+            cleaned_json = self._clean_json_string(response_text)
+            
+            result = json.loads(cleaned_json)
             
             # 新格式：多维度评分
             if 'dimensions' in result and 'total_score' in result:
@@ -374,7 +393,18 @@ open-source implementation, reproducible
             
         except json.JSONDecodeError as e:
             logger.warning(f"JSON解析失败: {e}")
-            return self._extract_score_from_text(response_text)
+            # 尝试清理JSON后重新解析
+            try:
+                cleaned_json = self._clean_json_string(response_text)
+                result = json.loads(cleaned_json)
+                # 重新进入新格式解析流程
+                if 'dimensions' in result and 'total_score' in result:
+                    return self._process_new_format(result, response_text)
+                else:
+                    return self._process_legacy_format(result, response_text)
+            except Exception as clean_error:
+                logger.warning(f"清理JSON后仍然解析失败: {clean_error}")
+                return self._extract_score_from_text(response_text)
         except Exception as e:
             logger.error(f"解析响应时出错: {e}")
             return {
@@ -384,6 +414,100 @@ open-source implementation, reproducible
                 'help': '需要进一步人工评估',
                 'raw_response': response_text
             }
+    
+    def _clean_json_string(self, json_str: str) -> str:
+        """清理和标准化JSON字符串，处理LLM返回的非标准格式"""
+        import re
+        
+        # 移除注释（// 和 /* */ 风格）
+        json_str = re.sub(r'//.*?$', '', json_str, flags=re.MULTILINE)
+        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+        
+        # 移除尾随逗号（在 } 或 ] 之前）
+        json_str = re.sub(r',\s*([}\]])', r'\1', json_str)
+        
+        # 处理属性名的引号问题：将单引号或无引号的属性名转为双引号
+        # 使用更简单的方法：先替换单引号键，再处理无引号键
+        
+        # 步骤1: 将单引号包裹的键名转换为双引号（但避免转换字符串值中的单引号）
+        # 匹配模式：{ 或 , 后面跟着单引号键名，然后是冒号
+        # 使用lookbehind来确保不会匹配字符串内部的内容
+        json_str = re.sub(r'([{,]\s*)\'([^\'\n]+)\'(\s*:)', r'\1"\2"\3', json_str)
+        
+        # 步骤2: 处理无引号的键名（只包含字母、数字、下划线）
+        # 使用更精确的模式来避免误匹配字符串值
+        def quote_unquoted_keys(match):
+            # 只在键名不是字符串值的一部分时才添加引号
+            return f'{match.group(1)}"{match.group(2)}"{match.group(3)}'
+        
+        # 匹配：{ 或 , + 可选空白 + 字母开头的标识符 + 可选空白 + :
+        # 这个模式需要小心处理，避免误匹配字符串值
+        # 使用否定lookbehind来确保前面不是 :（避免匹配字符串值）
+        json_str = re.sub(r'(?<!:)([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)', quote_unquoted_keys, json_str)
+        
+        # 步骤3: 移除所有不使用引号包裹的字符串值（简单方法：在需要的地方添加引号）
+        # 这个比较复杂，暂时不做，依赖后续的正则提取
+        
+        return json_str.strip()
+    
+    def _process_new_format(self, result: Dict, raw_response: str) -> Dict[str, Any]:
+        """处理新格式（多维度评分）"""
+        # 验证总分计算（允许小误差）
+        dim_sum = sum(d.get('score', 0) for d in result['dimensions'].values())
+        total_score = result.get('total_score', dim_sum)
+        if abs(dim_sum - total_score) > 2:
+            total_score = dim_sum  # 以维度之和为准
+        
+        total_score = max(0, min(100, int(total_score)))
+        
+        reason = result.get('reason', '').strip()
+        if not reason:
+            reason = f"{total_score}分相关"
+        
+        # 从 action_items 提取帮助信息
+        action_items = result.get('action_items', [])
+        if action_items and isinstance(action_items, list):
+            help_text = '; '.join(action_items[:3])  # 最多取3个
+        else:
+            help_text = '可作为研究参考'
+        
+        return {
+            'score': total_score,
+            'stars': total_score,
+            'reason': reason,
+            'help': help_text,
+            'dimensions': result['dimensions'],
+            'action_items': action_items,
+            'raw_response': raw_response
+        }
+    
+    def _process_legacy_format(self, result: Dict, raw_response: str) -> Dict[str, Any]:
+        """处理旧格式（直接的score/stars）"""
+        if 'score' in result:
+            score = int(result.get('score', 50))
+        elif 'stars' in result:
+            stars = int(result.get('stars', 3))
+            score = stars * 20
+        else:
+            score = 50
+        
+        score = max(0, min(100, score))
+        
+        reason = result.get('reason', '').strip()
+        if not reason:
+            reason = f"{score}分相关"
+        
+        help_text = result.get('help', '').strip()
+        if not help_text:
+            help_text = '可作为研究参考'
+        
+        return {
+            'score': score,
+            'stars': score,
+            'reason': reason,
+            'help': help_text,
+            'raw_response': raw_response
+        }
     
     def _extract_score_from_text(self, text: str) -> Dict[str, Any]:
         """从文本中提取分数（降级处理）"""
