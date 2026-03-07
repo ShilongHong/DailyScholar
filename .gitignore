@@ -24,7 +24,9 @@ wheels/
 venv/
 ENV/
 env/
-test
+
+# Test
+test/
 
 # Environment
 .env
@@ -37,11 +39,20 @@ logs/
 # Output
 output/
 
+# Backup files
+*.bak
+*.backup
+
 # Runtime Config (persistent local settings)
 runtime_config.json
 
-# Local config
+# Local config (contains API keys and secrets)
 config.py
+
+# Cache
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
 
 # IDE
 .vscode/
