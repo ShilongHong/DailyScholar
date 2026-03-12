@@ -9,7 +9,7 @@ import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.mysql_service import get_mysql_connection
+from services.storage_service import get_mysql_connection
 
 
 logger = logging.getLogger(__name__)

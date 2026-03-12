@@ -12,7 +12,7 @@ from threading import Lock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.mysql_service import get_mysql_connection, get_all_configs_from_db
+from services.storage_service import get_mysql_connection, get_all_configs_from_db
 from services.llm_filter_service import LLMFilterService
 
 

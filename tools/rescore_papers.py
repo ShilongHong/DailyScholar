@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import LLM_FILTER_CONFIG, ARXIV_CONFIG
 from services.llm_filter_service import LLMFilterService
-from services.mysql_service import get_mysql_connection, execute_query, execute_update
+from services.storage_service import get_mysql_connection, execute_query, execute_update
 
 # 配置日志
 logging.basicConfig(

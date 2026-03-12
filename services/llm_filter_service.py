@@ -12,6 +12,7 @@ import httpx
 # 从父目录导入配置
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_FILTER_CONFIG, RESEARCH_DESCRIPTION
 
@@ -21,10 +22,11 @@ logger = logging.getLogger(__name__)
 def get_research_description() -> str:
     """获取研究方向描述（优先使用运行时配置）"""
     try:
-        from services.mysql_service import get_all_configs_from_db
+        from services.storage_service import get_all_configs_from_db
+
         configs = get_all_configs_from_db()
-        if configs and 'research_description' in configs:
-            return configs['research_description']
+        if configs and "research_description" in configs:
+            return configs["research_description"]
     except Exception as e:
         logger.warning(f"从数据库获取研究方向失败: {e}")
     return RESEARCH_DESCRIPTION
@@ -32,7 +34,7 @@ def get_research_description() -> str:
 
 class LLMFilterService:
     """LLM论文筛选服务类"""
-    
+
     # Few-shot 示例
     FEW_SHOT_EXAMPLES = """
 ## 评分示例
@@ -94,7 +96,7 @@ class LLMFilterService:
 }
 ```
 """
-    
+
     # 评分锚点关键词
     SCORING_ANCHORS = """
 ## 评分参考锚点
@@ -121,67 +123,67 @@ open-source implementation, reproducible
 - 过时方法（2019年前的非深度学习方法，除非是经典基准）
 - 纯理论工作（无实验验证或实际应用）
 """
-    
+
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or LLM_FILTER_CONFIG
         # 从运行时配置获取研究方向
         self.research_description = get_research_description()
-        
+
         # 调试：查看配置中的所有键
         logger.info(f"LLMFilterService 接收到的配置键: {list(self.config.keys())}")
-        
+
         # 只提取需要的配置参数
-        api_key = self.config.get('api_key')
-        base_url = self.config.get('base_url')
-        
+        api_key = self.config.get("api_key")
+        base_url = self.config.get("base_url")
+
         # 创建一个明确的 httpx 客户端，不使用代理
-        http_client = httpx.Client(
-            timeout=60.0,
-            follow_redirects=True
-        )
-        
+        http_client = httpx.Client(timeout=60.0, follow_redirects=True)
+
         # 构建干净的参数字典
         client_kwargs = {
-            'http_client': http_client  # 明确指定 http_client，避免自动创建
+            "http_client": http_client  # 明确指定 http_client，避免自动创建
         }
-        
+
         if api_key:
-            client_kwargs['api_key'] = api_key
+            client_kwargs["api_key"] = api_key
         if base_url:
-            client_kwargs['base_url'] = base_url
-        
+            client_kwargs["base_url"] = base_url
+
         logger.info(f"OpenAI 客户端参数: {list(client_kwargs.keys())}")
-        
+
         # 创建 OpenAI 客户端
         self.client = OpenAI(**client_kwargs)
-        
-        self.model = self.config.get('model', 'gpt-3.5-turbo')
-        self.temperature = self.config.get('temperature', 0.1)
-        self.max_tokens = self.config.get('max_tokens', 500)
-        
+
+        self.model = self.config.get("model", "gpt-3.5-turbo")
+        self.temperature = self.config.get("temperature", 0.1)
+        self.max_tokens = self.config.get("max_tokens", 500)
+
         logger.info("LLMFilterService初始化完成")
-    
+
     def evaluate_paper(self, paper: Dict[str, Any]) -> Dict[str, Any]:
         """评估单篇论文的相关度"""
         max_retries = 3
         retry_delay = 5
-        
+
         for attempt in range(max_retries):
             try:
                 prompt = self._build_evaluation_prompt(paper)
-                
+
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": "你是一个学术论文评估专家，需要评估论文与给定研究方向的相关度。请使用100分制评分。"},
-                        {"role": "user", "content": prompt}
+                        {
+                            "role": "system",
+                            "content": "你是一个学术论文评估专家，需要评估论文与给定研究方向的相关度。请使用100分制评分。",
+                        },
+                        {"role": "user", "content": prompt},
                     ],
                     temperature=self.temperature,
-                    max_tokens=self.max_tokens
+                    max_tokens=self.max_tokens,
                 )
-                
+
                 result = self._parse_response(response.choices[0].message.content)
-                
+
                 # 记录成功的响应（调试用）
                 raw_content = response.choices[0].message.content
                 if len(raw_content) > 200:
@@ -189,74 +191,91 @@ open-source implementation, reproducible
                 else:
                     debug_preview = raw_content
                 logger.debug(f"LLM响应预览: {debug_preview}")
-                
-                logger.debug(f"论文 '{paper['Title'][:50]}...' 评分: {result['score']}分")
+
+                logger.debug(
+                    f"论文 '{paper['Title'][:50]}...' 评分: {result['score']}分"
+                )
                 return result
-                
+
             except Exception as e:
                 if attempt < max_retries - 1:
-                    logger.warning(f"LLM评估失败（尝试 {attempt + 1}/{max_retries}），{retry_delay}秒后重试: {str(e)}")
+                    logger.warning(
+                        f"LLM评估失败（尝试 {attempt + 1}/{max_retries}），{retry_delay}秒后重试: {str(e)}"
+                    )
                     import time
+
                     time.sleep(retry_delay)
                 else:
                     logger.error(f"评估论文时出错: {str(e)}")
                     return {
-                        'score': 50,
-                        'stars': 50,
-                        'reason': '评估失败，使用默认评分',
-                        'help': '需要进一步人工评估',
-                        'raw_response': ''
+                        "score": 50,
+                        "stars": 50,
+                        "reason": "评估失败，使用默认评分",
+                        "help": "需要进一步人工评估",
+                        "raw_response": "",
                     }
-    
-    def filter_papers(self, papers: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+
+    def filter_papers(
+        self, papers: List[Dict[str, Any]]
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """批量筛选论文，返回 (成功评估的论文列表, 失败的论文列表)"""
         if not papers:
             return [], []
-        
-        max_workers = self.config.get('max_workers', 16)
+
+        max_workers = self.config.get("max_workers", 16)
         logger.info(f"开始LLM筛选，共 {len(papers)} 篇论文，使用 {max_workers} 个线程")
-        
-        min_stars = self.config.get('min_stars', 3)
+
+        min_stars = self.config.get("min_stars", 3)
         filtered_papers = []
         failed_papers = []  # 评估失败的论文
         completed_count = 0
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_paper = {executor.submit(self.evaluate_paper, paper): paper for paper in papers}
-            
+            future_to_paper = {
+                executor.submit(self.evaluate_paper, paper): paper for paper in papers
+            }
+
             for future in as_completed(future_to_paper):
                 paper = future_to_paper[future]
                 completed_count += 1
-                
+
                 try:
                     evaluation = future.result()
-                    
-                    paper['Stars'] = evaluation['stars']
-                    paper['RelevanceReason'] = evaluation['reason']
-                    paper['PotentialHelp'] = evaluation.get('help', '可作为研究参考')
-                    
+
+                    paper["Stars"] = evaluation["stars"]
+                    paper["RelevanceReason"] = evaluation["reason"]
+                    paper["PotentialHelp"] = evaluation.get("help", "可作为研究参考")
+
                     # 检查是否评估失败（50分且原因包含"评估失败"）
-                    if evaluation['score'] == 50 and '评估失败' in evaluation['reason']:
+                    if evaluation["score"] == 50 and "评估失败" in evaluation["reason"]:
                         failed_papers.append(paper)
-                        logger.warning(f"  [{completed_count}/{len(papers)}] ⚠️ {paper['Title'][:50]}... -> 评估失败，标记为未处理")
+                        logger.warning(
+                            f"  [{completed_count}/{len(papers)}] ⚠️ {paper['Title'][:50]}... -> 评估失败，标记为未处理"
+                        )
                     else:
                         filtered_papers.append(paper)
-                        logger.info(f"  [{completed_count}/{len(papers)}] ✅ {paper['Title'][:50]}... -> {evaluation['score']}分")
-                    
+                        logger.info(
+                            f"  [{completed_count}/{len(papers)}] ✅ {paper['Title'][:50]}... -> {evaluation['score']}分"
+                        )
+
                 except Exception as e:
-                    logger.error(f"  [{completed_count}/{len(papers)}] ❌ {paper['Title'][:50]}... -> 错误: {str(e)}")
-                    paper['Stars'] = 50
-                    paper['RelevanceReason'] = '评估失败，使用默认评分'
-                    paper['PotentialHelp'] = '需要进一步人工评估'
+                    logger.error(
+                        f"  [{completed_count}/{len(papers)}] ❌ {paper['Title'][:50]}... -> 错误: {str(e)}"
+                    )
+                    paper["Stars"] = 50
+                    paper["RelevanceReason"] = "评估失败，使用默认评分"
+                    paper["PotentialHelp"] = "需要进一步人工评估"
                     failed_papers.append(paper)
-        
-        filtered_papers.sort(key=lambda x: x['Stars'], reverse=True)
-        
-        high_relevance = [p for p in filtered_papers if p['Stars'] >= min_stars]
-        logger.info(f"筛选完成: {len(high_relevance)}/{len(papers)} 篇论文达到 {min_stars}星及以上")
-        
+
+        filtered_papers.sort(key=lambda x: x["Stars"], reverse=True)
+
+        high_relevance = [p for p in filtered_papers if p["Stars"] >= min_stars]
+        logger.info(
+            f"筛选完成: {len(high_relevance)}/{len(papers)} 篇论文达到 {min_stars}星及以上"
+        )
+
         return filtered_papers, failed_papers
-    
+
     def _build_evaluation_prompt(self, paper: Dict[str, Any]) -> str:
         """构建评估提示词"""
         prompt = f"""你是一位专业的科研论文评审专家。请评估以下论文与给定研究方向的相关度。
@@ -265,8 +284,8 @@ open-source implementation, reproducible
 {self.research_description}
 
 # 待评估论文
-**标题**：{paper.get('Title', 'N/A')}
-**摘要**：{paper.get('Abstract', 'N/A')}
+**标题**：{paper.get("Title", "N/A")}
+**摘要**：{paper.get("Abstract", "N/A")}
 
 {self.SCORING_ANCHORS}
 
@@ -311,86 +330,86 @@ open-source implementation, reproducible
 - 0-39分：不相关，可跳过
 
 只输出JSON，不要有任何其他文字。"""
-        
+
         return prompt
-    
+
     def _parse_response(self, response_text: str) -> Dict[str, Any]:
         """解析LLM响应"""
         try:
             response_text = response_text.strip()
-            
+
             # 提取JSON部分
-            if '```json' in response_text:
-                start = response_text.find('```json') + 7
-                end = response_text.find('```', start)
+            if "```json" in response_text:
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
                 response_text = response_text[start:end].strip()
-            elif '```' in response_text:
-                start = response_text.find('```') + 3
-                end = response_text.find('```', start)
+            elif "```" in response_text:
+                start = response_text.find("```") + 3
+                end = response_text.find("```", start)
                 response_text = response_text[start:end].strip()
-            
+
             # 清理和标准化JSON（处理LLM返回的非标准格式）
             cleaned_json = self._clean_json_string(response_text)
-            
+
             result = json.loads(cleaned_json)
-            
+
             # 新格式：多维度评分
-            if 'dimensions' in result and 'total_score' in result:
+            if "dimensions" in result and "total_score" in result:
                 # 验证总分计算（允许小误差）
-                dim_sum = sum(d.get('score', 0) for d in result['dimensions'].values())
-                total_score = result.get('total_score', dim_sum)
+                dim_sum = sum(d.get("score", 0) for d in result["dimensions"].values())
+                total_score = result.get("total_score", dim_sum)
                 if abs(dim_sum - total_score) > 2:
                     total_score = dim_sum  # 以维度之和为准
-                
+
                 total_score = max(0, min(100, int(total_score)))
-                
-                reason = result.get('reason', '').strip()
+
+                reason = result.get("reason", "").strip()
                 if not reason:
                     reason = f"{total_score}分相关"
-                
+
                 # 从 action_items 提取帮助信息
-                action_items = result.get('action_items', [])
+                action_items = result.get("action_items", [])
                 if action_items and isinstance(action_items, list):
-                    help_text = '; '.join(action_items[:3])  # 最多取3个
+                    help_text = "; ".join(action_items[:3])  # 最多取3个
                 else:
-                    help_text = '可作为研究参考'
-                
+                    help_text = "可作为研究参考"
+
                 return {
-                    'score': total_score,
-                    'stars': total_score,
-                    'reason': reason,
-                    'help': help_text,
-                    'dimensions': result['dimensions'],
-                    'action_items': action_items,
-                    'raw_response': response_text
+                    "score": total_score,
+                    "stars": total_score,
+                    "reason": reason,
+                    "help": help_text,
+                    "dimensions": result["dimensions"],
+                    "action_items": action_items,
+                    "raw_response": response_text,
                 }
-            
+
             # 兼容旧格式：直接的score/stars
-            elif 'score' in result:
-                score = int(result.get('score', 50))
+            elif "score" in result:
+                score = int(result.get("score", 50))
                 score = max(0, min(100, score))
-            elif 'stars' in result:
-                stars = int(result.get('stars', 3))
+            elif "stars" in result:
+                stars = int(result.get("stars", 3))
                 score = stars * 20
             else:
                 score = 50
-            
-            reason = result.get('reason', '').strip()
+
+            reason = result.get("reason", "").strip()
             if not reason:
                 reason = f"{score}分相关"
-            
-            help_text = result.get('help', '').strip()
+
+            help_text = result.get("help", "").strip()
             if not help_text:
-                help_text = '可作为研究参考'
-            
+                help_text = "可作为研究参考"
+
             return {
-                'score': score,
-                'stars': score,
-                'reason': reason,
-                'help': help_text,
-                'raw_response': response_text
+                "score": score,
+                "stars": score,
+                "reason": reason,
+                "help": help_text,
+                "raw_response": response_text,
             }
-            
+
         except json.JSONDecodeError as e:
             logger.warning(f"JSON解析失败: {e}")
             # 尝试清理JSON后重新解析
@@ -398,7 +417,7 @@ open-source implementation, reproducible
                 cleaned_json = self._clean_json_string(response_text)
                 result = json.loads(cleaned_json)
                 # 重新进入新格式解析流程
-                if 'dimensions' in result and 'total_score' in result:
+                if "dimensions" in result and "total_score" in result:
                     return self._process_new_format(result, response_text)
                 else:
                     return self._process_legacy_format(result, response_text)
@@ -408,111 +427,115 @@ open-source implementation, reproducible
         except Exception as e:
             logger.error(f"解析响应时出错: {e}")
             return {
-                'score': 50,
-                'stars': 50,
-                'reason': '解析失败，使用默认评分',
-                'help': '需要进一步人工评估',
-                'raw_response': response_text
+                "score": 50,
+                "stars": 50,
+                "reason": "解析失败，使用默认评分",
+                "help": "需要进一步人工评估",
+                "raw_response": response_text,
             }
-    
+
     def _clean_json_string(self, json_str: str) -> str:
         """清理和标准化JSON字符串，处理LLM返回的非标准格式"""
         import re
-        
+
         # 移除注释（// 和 /* */ 风格）
-        json_str = re.sub(r'//.*?$', '', json_str, flags=re.MULTILINE)
-        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
-        
+        json_str = re.sub(r"//.*?$", "", json_str, flags=re.MULTILINE)
+        json_str = re.sub(r"/\*.*?\*/", "", json_str, flags=re.DOTALL)
+
         # 移除尾随逗号（在 } 或 ] 之前）
-        json_str = re.sub(r',\s*([}\]])', r'\1', json_str)
-        
+        json_str = re.sub(r",\s*([}\]])", r"\1", json_str)
+
         # 处理属性名的引号问题：将单引号或无引号的属性名转为双引号
         # 使用更简单的方法：先替换单引号键，再处理无引号键
-        
+
         # 步骤1: 将单引号包裹的键名转换为双引号（但避免转换字符串值中的单引号）
         # 匹配模式：{ 或 , 后面跟着单引号键名，然后是冒号
         # 使用lookbehind来确保不会匹配字符串内部的内容
-        json_str = re.sub(r'([{,]\s*)\'([^\'\n]+)\'(\s*:)', r'\1"\2"\3', json_str)
-        
+        json_str = re.sub(r"([{,]\s*)\'([^\'\n]+)\'(\s*:)", r'\1"\2"\3', json_str)
+
         # 步骤2: 处理无引号的键名（只包含字母、数字、下划线）
         # 使用更精确的模式来避免误匹配字符串值
         def quote_unquoted_keys(match):
             # 只在键名不是字符串值的一部分时才添加引号
             return f'{match.group(1)}"{match.group(2)}"{match.group(3)}'
-        
+
         # 匹配：{ 或 , + 可选空白 + 字母开头的标识符 + 可选空白 + :
         # 这个模式需要小心处理，避免误匹配字符串值
         # 使用否定lookbehind来确保前面不是 :（避免匹配字符串值）
-        json_str = re.sub(r'(?<!:)([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)', quote_unquoted_keys, json_str)
-        
+        json_str = re.sub(
+            r"(?<!:)([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)",
+            quote_unquoted_keys,
+            json_str,
+        )
+
         # 步骤3: 移除所有不使用引号包裹的字符串值（简单方法：在需要的地方添加引号）
         # 这个比较复杂，暂时不做，依赖后续的正则提取
-        
+
         return json_str.strip()
-    
+
     def _process_new_format(self, result: Dict, raw_response: str) -> Dict[str, Any]:
         """处理新格式（多维度评分）"""
         # 验证总分计算（允许小误差）
-        dim_sum = sum(d.get('score', 0) for d in result['dimensions'].values())
-        total_score = result.get('total_score', dim_sum)
+        dim_sum = sum(d.get("score", 0) for d in result["dimensions"].values())
+        total_score = result.get("total_score", dim_sum)
         if abs(dim_sum - total_score) > 2:
             total_score = dim_sum  # 以维度之和为准
-        
+
         total_score = max(0, min(100, int(total_score)))
-        
-        reason = result.get('reason', '').strip()
+
+        reason = result.get("reason", "").strip()
         if not reason:
             reason = f"{total_score}分相关"
-        
+
         # 从 action_items 提取帮助信息
-        action_items = result.get('action_items', [])
+        action_items = result.get("action_items", [])
         if action_items and isinstance(action_items, list):
-            help_text = '; '.join(action_items[:3])  # 最多取3个
+            help_text = "; ".join(action_items[:3])  # 最多取3个
         else:
-            help_text = '可作为研究参考'
-        
+            help_text = "可作为研究参考"
+
         return {
-            'score': total_score,
-            'stars': total_score,
-            'reason': reason,
-            'help': help_text,
-            'dimensions': result['dimensions'],
-            'action_items': action_items,
-            'raw_response': raw_response
+            "score": total_score,
+            "stars": total_score,
+            "reason": reason,
+            "help": help_text,
+            "dimensions": result["dimensions"],
+            "action_items": action_items,
+            "raw_response": raw_response,
         }
-    
+
     def _process_legacy_format(self, result: Dict, raw_response: str) -> Dict[str, Any]:
         """处理旧格式（直接的score/stars）"""
-        if 'score' in result:
-            score = int(result.get('score', 50))
-        elif 'stars' in result:
-            stars = int(result.get('stars', 3))
+        if "score" in result:
+            score = int(result.get("score", 50))
+        elif "stars" in result:
+            stars = int(result.get("stars", 3))
             score = stars * 20
         else:
             score = 50
-        
+
         score = max(0, min(100, score))
-        
-        reason = result.get('reason', '').strip()
+
+        reason = result.get("reason", "").strip()
         if not reason:
             reason = f"{score}分相关"
-        
-        help_text = result.get('help', '').strip()
+
+        help_text = result.get("help", "").strip()
         if not help_text:
-            help_text = '可作为研究参考'
-        
+            help_text = "可作为研究参考"
+
         return {
-            'score': score,
-            'stars': score,
-            'reason': reason,
-            'help': help_text,
-            'raw_response': raw_response
+            "score": score,
+            "stars": score,
+            "reason": reason,
+            "help": help_text,
+            "raw_response": raw_response,
         }
-    
+
     def _extract_score_from_text(self, text: str) -> Dict[str, Any]:
         """从文本中提取分数（降级处理）"""
         import re
-        
+
         # 尝试提取 total_score
         total_match = re.search(r'["\']?total_score["\']?\s*[:：]\s*(\d{1,3})', text)
         if total_match:
@@ -533,19 +556,21 @@ open-source implementation, reproducible
                     score = max(0, min(100, score))
                 else:
                     score = 50
-        
-        reason_match = re.search(r'["\']?reason["\']?\s*[:：]\s*["\']([^"\']+)["\']', text)
+
+        reason_match = re.search(
+            r'["\']?reason["\']?\s*[:：]\s*["\']([^"\']+)["\']', text
+        )
         if reason_match:
             reason = reason_match.group(1).strip()
         else:
             reason = f"{score}分相关"
-        
+
         return {
-            'score': score,
-            'stars': score,
-            'reason': reason,
-            'help': '解析异常，建议人工审查',
-            'raw_response': text
+            "score": score,
+            "stars": score,
+            "reason": reason,
+            "help": "解析异常，建议人工审查",
+            "raw_response": text,
         }
 
 

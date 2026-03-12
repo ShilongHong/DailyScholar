@@ -6,7 +6,7 @@ import logging
 from typing import List, Dict, Any
 
 # 导入数据库队列函数
-from .mysql_service import (
+from .storage_service import (
     enqueue_papers_to_db,
     dequeue_papers_from_db,
     get_queue_size_from_db,
