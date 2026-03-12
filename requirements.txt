@@ -14,10 +14,7 @@ schedule>=1.2.0
 # 时区支持
 pytz>=2024.1
 
-# 钉钉推送
-alibabacloud-dingtalk>=2.0.0
-alibabacloud-tea-openapi>=0.3.0
-alibabacloud-tea-util>=0.3.0
+# OpenClaw CLI 通过系统命令调用，无需额外 SDK 依赖
 requests>=2.31.0
 
 # LLM调用
@@ -25,3 +22,6 @@ openai>=1.0.0
 
 # MySQL数据库
 pymysql>=1.1.0
+
+# 测试
+pytest>=8.0.0
