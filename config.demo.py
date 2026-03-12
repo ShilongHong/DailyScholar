@@ -72,14 +72,14 @@ LLM_FILTER_CONFIG = {
 }
 
 
-DINGTALK_CONFIG = {
-    "app_key": "your-app-key",
-    "app_secret": "your-app-secret",
-    "robot_code": "your-robot-code",
-    "open_conversation_id": "your-open-conversation-id",
-    "access_token": "",
-    "token_expire_time": 0,
-    "token_url": "https://oapi.dingtalk.com/gettoken",
+OPENCLAW_CONFIG = {
+    "enabled": True,
+    "delivery_mode": "cli-session",
+    "binary_path": "openclaw",
+    "session_key": "main",
+    "timeout_seconds": 120,
+    "max_papers_per_message": 5,
+    "include_full_abstract": False,
 }
 
 

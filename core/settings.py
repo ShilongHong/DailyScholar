@@ -1,0 +1,25 @@
+DEFAULT_SETTINGS = {
+    "database": {
+        "engine": "sqlite",
+        "sqlite_path": "data/paper2data.db",
+        "host": "localhost",
+        "port": 3306,
+        "user": "root",
+        "password": "",
+        "database": "paper2data",
+        "charset": "utf8mb4",
+        "table_raw": "papers_raw",
+        "table_relevant": "papers_relevant",
+        "table_queue": "paper_queue",
+        "table_config": "system_config",
+    },
+    "openclaw": {
+        "enabled": True,
+        "delivery_mode": "cli-session",
+        "binary_path": "openclaw",
+        "session_key": "main",
+        "timeout_seconds": 120,
+        "max_papers_per_message": 5,
+        "include_full_abstract": False,
+    },
+}
