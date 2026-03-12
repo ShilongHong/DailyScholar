@@ -47,7 +47,7 @@ output/
 runtime_config.json
 
 # Local config (contains API keys and secrets)
-config.py
+config.local.json
 
 # Cache
 .ruff_cache/
