@@ -1,0 +1,9 @@
+{
+  "database": {
+    "engine": "sqlite",
+    "sqlite_path": "data/paper2data.db"
+  },
+  "openclaw": {
+    "session_key": "main"
+  }
+}
