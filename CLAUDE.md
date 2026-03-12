@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an **ArXiv Paper Push System v3.0** - a three-in-one academic paper recommendation system that combines FastAPI backend, built-in scheduler, and static frontend server. It automatically fetches papers from arXiv, uses LLM to filter relevant papers, translates them to Chinese, and pushes notifications to DingTalk.
+This is an **ArXiv Paper Push System v3.0** - a three-in-one academic paper recommendation system that combines FastAPI backend, built-in scheduler, and static frontend server. It automatically fetches papers from arXiv, uses LLM to filter relevant papers, translates them to Chinese, and delivers digests to OpenClaw sessions.
 
 **Port**: 20001
 **Main Entry**: [app.py](app.py)
@@ -32,7 +32,7 @@ No automated tests currently exist. For manual verification, use API endpoints:
 curl -X POST http://localhost:20001/api/actions/fetch-now
 
 # Test pushing papers
-curl -X POST http://localhost:20001/api/actions/push-now
+curl -X POST http://localhost:20001/api/actions/deliver-now
 ```
 
 If adding tests, install pytest and create tests in `test/`:
@@ -45,7 +45,7 @@ pytest test/
 
 ### Data Flow Pipeline
 ```
-arXiv API → papers_raw (MySQL) → LLM Filter → Translation → papers_relevant → paper_queue → DingTalk Push
+arXiv API → papers_raw (SQLite/MySQL) → LLM Filter → Translation → papers_relevant → paper_queue → OpenClaw Session Delivery
 ```
 
 ### Service Modules (`services/`)
@@ -55,9 +55,9 @@ arXiv API → papers_raw (MySQL) → LLM Filter → Translation → papers_relev
 | [arxiv_service.py](services/arxiv_service.py) | Fetch papers from arXiv API | Supports category codes (cs.CL, cs.CV) and keywords |
 | [llm_filter_service.py](services/llm_filter_service.py) | AI-powered relevance scoring | Uses DeepSeek-V3.2, 100-point scale (60+ passes) |
 | [translation_service.py](services/translation_service.py) | Chinese/English translation | Translates titles and abstracts |
-| [mysql_service.py](services/mysql_service.py) | Database operations | Thread-safe connections via `threading.local()`, auto-migration |
-| [dingtalk_http_service.py](services/dingtalk_http_service.py) | DingTalk notifications | **Preferred over SDK version** |
-| [dingtalk_service.py](services/dingtalk_service.py) | DingTalk SDK version | Legacy, prefer HTTP version |
+| [mysql_service.py](services/mysql_service.py) | Legacy MySQL backend | Wrapped by `storage/mysql_store.py` and `services/storage_service.py` |
+| [services/storage_service.py](services/storage_service.py) | Storage compatibility layer | Routes SQLite/MySQL access through a shared interface |
+| [delivery/openclaw_notifier.py](delivery/openclaw_notifier.py) | OpenClaw delivery | Sends digests to OpenClaw sessions via local CLI |
 | [paper_queue_service.py](services/paper_queue_service.py) | Push queue management | Prevents duplicate notifications |
 
 ### Key Design Patterns
@@ -82,7 +82,7 @@ conn.commit()
 - Main thread fetches and saves to `papers_raw`
 - Background thread continuously reads `processed=0` records, filters, translates, and saves to `papers_relevant`
 
-**4. Auto-Migration**: `_ensure_tables_exist()` in mysql_service.py automatically adds missing columns
+**4. Auto-Migration**: MySQL schema compatibility is still handled by `mysql_service.py`, while SQLite schema lives in `storage/sqlite_store.py`
 
 ## Configuration
 
@@ -152,7 +152,7 @@ Located in [tools/](tools/) directory:
 
 The API provides several endpoints for triggering tasks manually:
 - `POST /api/actions/fetch-now`: Immediately fetch papers from arXiv (runs in background)
-- `POST /api/actions/push-now`: Immediately push papers to DingTalk
+- `POST /api/actions/deliver-now`: Immediately deliver papers to OpenClaw session
 - `POST /api/actions/process-now`: Process unprocessed papers from `papers_raw`
 - `GET /api/logs/list`: List available log files
 - `GET /api/logs/content`: View log content (last N lines)
@@ -181,5 +181,5 @@ Reload scheduler after config changes: `POST /api/scheduler/reload`
 - Central configuration: [config.py](config.py)
 - ArXiv integration: [services/arxiv_service.py](services/arxiv_service.py)
 - LLM filtering: [services/llm_filter_service.py](services/llm_filter_service.py)
-- Database operations: [services/mysql_service.py](services/mysql_service.py)
+- Database operations: [services/storage_service.py](services/storage_service.py)
 - Frontend (Vue3 SPA): [static/index.html](static/index.html)

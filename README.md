@@ -8,7 +8,7 @@
 > **告别信息过载。** 让 AI 帮您阅读每天的 ArXiv 论文，只把真正值得读的推送到您面前。
 > 基于opencode的CLaude Sonnet和Gemini3 Pro生成
 
-Paper2Data 是一个**开箱即用**的科研辅助系统。它集成了数据抓取、LLM 智能筛选、自动翻译和钉钉推送功能，并提供了一个现代化的 Web 界面来管理这一切。
+Paper2Data 是一个**开箱即用**的科研辅助系统。它集成了数据抓取、LLM 智能筛选、自动翻译和 OpenClaw 会话投递功能，并提供了一个现代化的 Web 界面来管理这一切。
 
 ---
 
@@ -17,7 +17,7 @@ Paper2Data 是一个**开箱即用**的科研辅助系统。它集成了数据�
 - **🧠 懂你的 AI 助手**: 不只是关键词匹配，而是基于 LLM 深度理解论文内容，根据您的**自然语言研究描述**进行评分和筛选。
 - **📊 可视化情报中心**: 内置精美的 Web 仪表盘，论文质量分布、每日获取统计一目了然。
 - **⚡ 三合一极简架构**: 后端 (FastAPI)、前端 (Vue3) 和 调度器 (Schedule) 融合在单个进程中。没有复杂的 Nginx 配置，没有微服务，**运行一个 Python 脚本即可启动所有服务**。
-- **📱 多端同步**: 支持钉钉机器人推送，早上通勤路上即可完成每日论文初筛。
+- **💬 OpenClaw 直达**: 支持把每日论文摘要直接投递到 OpenClaw session，方便继续追问、筛选和改写。
 
 ---
 
@@ -67,8 +67,8 @@ graph TD
 
     subgraph "应用层"
         RelevantDB -->|Web API| Frontend[Web 仪表盘]
-        RelevantDB -->|定时任务| Pusher[推送服务]
-        Pusher -->|Markdown 消息| DingTalk[钉钉机器人]
+        RelevantDB -->|定时任务| Pusher[投递服务]
+        Pusher -->|Session 消息| OpenClaw[OpenClaw Session]
     end
 ```
 
@@ -79,7 +79,7 @@ graph TD
 ### 1. 环境准备
 确保您的系统已安装：
 - Python 3.8+
-- MySQL 8.0+
+- OpenClaw CLI
 
 ### 2. 安装与配置
 ```bash
@@ -90,19 +90,28 @@ cd paper2data
 # 安装依赖
 pip install -r requirements.txt
 
-# 配置文件
-cp config.demo.py config.py
-# ⚠️ 编辑 config.py，填入您的 MySQL 信息、LLM API Key 和 钉钉 Token
+# 首次初始化
+python -m cli.init
+# 向导会先询问数据库、LLM 和 OpenClaw session 配置
 ```
 
 ### 3. 启动系统
 ```bash
 python app.py
+# 或
+python -m cli.run
 ```
 
 启动成功后，访问：
 - **Web 界面**: [http://localhost:20001](http://localhost:20001)
 - **API 文档**: [http://localhost:20001/docs](http://localhost:20001/docs)
+
+### 手动任务
+
+```bash
+python -m cli.fetch
+python -m cli.deliver
+```
 
 ---
 
@@ -129,7 +138,7 @@ RESEARCH_DESCRIPTION = """
 ### 定时任务调整
 在 `SCHEDULE_CONFIG` 中调整时间：
 - `fetch_papers`: 建议设置为凌晨 (如 `02:00`)，此时 ArXiv 数据已更新。
-- `push_papers`: 设置为您每天开始工作的时间 (如 `09:00`)。
+- `push_papers`: 设置为您希望 OpenClaw 接收摘要的时间 (如 `09:00`)。
 
 ---
 

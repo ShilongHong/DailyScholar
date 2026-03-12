@@ -8,7 +8,7 @@ This document provides essential context and guidelines for AI agents working on
 **Entry Point**: `app.py`
 
 ### Key Features
-- **Data Flow**: `arXiv API` -> `MySQL (papers_raw)` -> `LLM Filter` -> `Translation` -> `MySQL (papers_relevant)` -> `DingTalk Push`
+- **Data Flow**: `arXiv API` -> `papers_raw` -> `LLM Filter` -> `Translation` -> `papers_relevant` -> `paper_queue` -> `OpenClaw Session Delivery`
 - **Scheduler**: Integrated `schedule` library running in main process.
 - **Frontend**: Static files served from `static/`.
 
@@ -54,11 +54,11 @@ python app.py
 - **Class Names**: English `CamelCase` (e.g., `ArxivService`).
 
 ### Database Patterns (CRITICAL)
-**Library**: `pymysql` (Thread-safe wrapper)
-**Rule**: NEVER share connections between threads. ALWAYS use the service helper.
+**Library**: `pymysql` for MySQL, `sqlite3` for SQLite
+**Rule**: Through application code, prefer the storage compatibility layer. Only use raw MySQL connections in legacy maintenance scripts.
 
 ```python
-from services.mysql_service import get_mysql_connection
+from services.storage_service import get_mysql_connection
 
 def my_db_task():
     # Correct way to get a thread-local connection
@@ -90,8 +90,9 @@ def my_db_task():
 | `arxiv_service.py` | Fetch from arXiv API. Handles keywords & categories (e.g. `cs.CL`). |
 | `llm_filter_service.py` | Evaluate relevance (0-100 score) using OpenAI-compatible API. |
 | `translation_service.py` | Translate Title/Abstract (CN/EN). |
-| `mysql_service.py` | Central DB access. Handles connection pooling/thread-safety. |
-| `dingtalk_service.py` | Send notifications via DingTalk webhook. |
+| `mysql_service.py` | Legacy MySQL implementation used by `storage/mysql_store.py`. |
+| `storage_service.py` | Storage compatibility layer for SQLite/MySQL selection. |
+| `delivery/openclaw_notifier.py` | Send paper digests to OpenClaw sessions. |
 | `paper_queue_service.py` | Manage push queue. |
 
 ### Utility Tools (`tools/`)
@@ -114,4 +115,4 @@ Update `ARXIV_CONFIG['keywords']` in `config.py` OR update the `system_config` t
 ### Manual Trigger
 Use these API endpoints for testing flows:
 - `POST /api/actions/fetch-now`: Trigger immediate paper fetch.
-- `POST /api/actions/push-now`: Trigger immediate push to DingTalk.
+- `POST /api/actions/deliver-now`: Trigger immediate delivery to OpenClaw session.
