@@ -734,6 +734,10 @@ class TestLLMConnectionRequest(BaseModel):
     model: str = Field(...)
 
 
+class GenerateResearchRequest(BaseModel):
+    brief: str = Field(..., min_length=5, max_length=500, description="一句话研究方向")
+
+
 def _test_llm_connection(api_key: str, base_url: str, model: str) -> str:
     timeout = httpx.Timeout(30.0)
     with httpx.Client(
@@ -750,6 +754,143 @@ def _test_llm_connection(api_key: str, base_url: str, model: str) -> str:
         )
         content = response.choices[0].message.content if response.choices else ""
         return content or "LLM接口响应成功"
+
+
+def _extract_json_payload(response_text: str) -> dict[str, Any]:
+    text = response_text.strip()
+    if text.startswith("```"):
+        lines = [
+            line for line in text.splitlines() if not line.strip().startswith("```")
+        ]
+        text = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        candidate = text[start : end + 1]
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise ValueError("模型返回内容不是有效的 JSON")
+
+
+def _normalize_arxiv_keywords(keywords: object) -> list[str]:
+    allowed_keywords = {
+        "cs.CV",
+        "cs.CL",
+        "cs.AI",
+        "cs.LG",
+        "cs.IR",
+        "cs.RO",
+        "cs.NE",
+        "eess.IV",
+        "eess.SP",
+        "stat.ML",
+    }
+
+    if not isinstance(keywords, list):
+        return []
+
+    normalized: list[str] = []
+    for item in keywords:
+        if not isinstance(item, str):
+            continue
+        keyword = item.strip()
+        if keyword in allowed_keywords and keyword not in normalized:
+            normalized.append(keyword)
+    return normalized[:6]
+
+
+def generate_research_description(
+    brief: str, llm_config: dict[str, Any]
+) -> dict[str, Any]:
+    prompt = f"""你是一位学术研究顾问。请根据用户的一句话研究方向描述，生成详细的研究方向说明。
+
+用户输入：{brief}
+
+请生成：
+1. 详细的研究方向描述（200-400字，包含核心主题、相关技术、潜在应用）
+2. 推荐的 ArXiv 分类（从以下选择最相关的3-6个：cs.CV, cs.CL, cs.AI, cs.LG, cs.IR, cs.RO, cs.NE, eess.IV, eess.SP, stat.ML）
+3. 应该排除的研究方向
+
+请以 JSON 格式返回：
+{{
+  "research_description": "...",
+  "arxiv_keywords": [...],
+  "excluded_fields": [...]
+}}"""
+
+    base_url = str(llm_config.get("base_url", "")).strip()
+    api_key = str(llm_config.get("api_key", "")).strip()
+    model = str(llm_config.get("model", "")).strip()
+
+    if not base_url or not api_key or not model:
+        raise ValueError("LLM 配置不完整，请先完成初始化配置")
+
+    timeout = httpx.Timeout(60.0)
+    with httpx.Client(
+        proxy=None,
+        timeout=timeout,
+        follow_redirects=True,
+        trust_env=False,
+    ) as http_client:
+        response = http_client.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是学术研究顾问，帮助研究生细化研究方向。",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    choices = payload.get("choices", []) if isinstance(payload, dict) else []
+    content = ""
+    if choices and isinstance(choices, list):
+        first_choice = choices[0]
+        if isinstance(first_choice, dict):
+            message = first_choice.get("message", {})
+            if isinstance(message, dict):
+                content = str(message.get("content", ""))
+
+    if not content.strip():
+        raise ValueError("模型未返回有效内容")
+
+    result = _extract_json_payload(content)
+    research_description = str(result.get("research_description", "")).strip()
+    excluded_fields_raw = result.get("excluded_fields", [])
+    excluded_fields = (
+        [str(item).strip() for item in excluded_fields_raw if str(item).strip()]
+        if isinstance(excluded_fields_raw, list)
+        else []
+    )
+
+    arxiv_keywords = _normalize_arxiv_keywords(result.get("arxiv_keywords", []))
+    if not research_description:
+        raise ValueError("模型返回的研究方向描述为空")
+
+    return {
+        "research_description": research_description,
+        "arxiv_keywords": arxiv_keywords,
+        "excluded_fields": excluded_fields,
+    }
 
 
 @app.post("/api/setup/test-llm")
@@ -780,6 +921,27 @@ async def test_llm_connection(request: TestLLMConnectionRequest):
             "message": f"LLM接口连接失败: {error_message}",
             "model": model,
         }
+
+
+@app.post("/api/setup/generate-research")
+async def generate_research(request: GenerateResearchRequest):
+    brief = request.brief.strip()
+    llm_config = get_config("llm_filter")
+
+    logger.info(f"开始生成研究方向描述: brief={brief[:80]}")
+
+    try:
+        data = await asyncio.to_thread(
+            generate_research_description, brief, cast(dict[str, Any], llm_config)
+        )
+        return {"success": True, "data": data}
+    except httpx.TimeoutException:
+        logger.warning("生成研究方向描述超时")
+        return {"success": False, "message": "生成研究方向描述超时，请稍后重试"}
+    except Exception as e:
+        error_message = str(e).strip() or "未知错误"
+        logger.warning(f"生成研究方向描述失败: {error_message}")
+        return {"success": False, "message": f"生成研究方向描述失败: {error_message}"}
 
 
 @app.post("/api/setup/test-notify")

@@ -1051,42 +1051,8 @@
                         </div>
                     </div>
 
-                    <!-- Step 3: 研究方向 -->
+                    <!-- Step 3: LLM 配置（原 Step 4） -->
                     <div v-if="wizardStep === 3" class="max-w-2xl mx-auto">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <i class="ph ph-compass text-xl text-purple-600"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-xl font-bold text-gray-900">研究方向描述</h3>
-                                <p class="text-sm text-gray-500">描述您的研究方向，LLM 会根据此描述评估论文相关度</p>
-                            </div>
-                        </div>
-
-                        <div>
-                            <textarea v-model="wizardData.research" rows="12"
-                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm font-mono leading-relaxed"
-                                placeholder="请详细描述您的研究方向，例如：&#10;&#10;我的研究方向是多模态大模型在医疗影像中的应用。&#10;重点关注：&#10;1. CLIP 模型在 X 光片上的微调策略&#10;2. 医疗报告自动生成 (Report Generation)&#10;3. 视觉问答 (VQA) 在病理切片上的应用&#10;&#10;不感兴趣的方向：&#10;- 纯 NLP 文本摘要&#10;- 传统 CNN 图像分割算法"></textarea>
-                        </div>
-
-                        <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <div class="flex items-start gap-2">
-                                <i class="ph ph-lightbulb text-blue-600 text-lg mt-0.5"></i>
-                                <div class="text-sm text-blue-800">
-                                    <p class="font-medium mb-1">写作建议</p>
-                                    <ul class="space-y-1 list-disc list-inside text-blue-700">
-                                        <li>描述越详细，AI 筛选越精准</li>
-                                        <li>可以列出关键词、技术方向、关注的问题</li>
-                                        <li>明确指出不感兴趣的方向有助于减少噪音</li>
-                                        <li>可以使用中文或英文</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 4: LLM 配置 -->
-                    <div v-if="wizardStep === 4" class="max-w-2xl mx-auto">
                         <div class="flex items-center gap-3 mb-6">
                             <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                                 <i class="ph ph-brain text-xl text-green-600"></i>
@@ -1129,6 +1095,59 @@
                                     {{ wizardTestResults.llm.message || (wizardTestResults.llm.success ? 'API 连接成功' : 'API 连接失败') }}
                                 </span>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: 研究方向 + AI 生成 -->
+                    <div v-if="wizardStep === 4" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-target text-xl text-purple-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">研究方向</h3>
+                                <p class="text-sm text-gray-500">描述您的研究领域，帮助AI筛选相关论文</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-5 mb-6 border border-purple-100">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="ph ph-magic-wand text-purple-600"></i> 一句话描述您的研究方向
+                            </label>
+                            <div class="flex gap-2">
+                                <input type="text" v-model="researchBrief" 
+                                    placeholder="例如：我的研究方向是多模态大模型在医疗影像中的应用"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 text-sm">
+                                <button @click="generateResearch" :disabled="generatingResearch || !researchBrief"
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm whitespace-nowrap">
+                                    <i class="ph ph-sparkle"></i>
+                                    <span v-if="generatingResearch">生成中...</span>
+                                    <span v-else>AI 生成</span>
+                                </button>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">AI 将根据您的描述生成详细的研究方向说明和推荐关键词</p>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">研究方向详细描述</label>
+                            <textarea v-model="wizardData.research" rows="8" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+                                placeholder="详细描述您的研究方向，或使用 AI 生成..."></textarea>
+                            <p class="text-xs text-gray-500 mt-1">描述越具体，AI 筛选越准确</p>
+                        </div>
+                        
+                        <div v-if="aiGeneratedKeywords.length > 0" class="bg-green-50 rounded-lg p-4 border border-green-200">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i class="ph ph-lightning text-green-600"></i>
+                                <span class="text-sm font-medium text-green-800">AI 推荐的 ArXiv 分类</span>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <span v-for="kw in aiGeneratedKeywords" :key="kw" 
+                                    class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                                    {{ kw }}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">这些关键词将在下一步自动填入</p>
                         </div>
                     </div>
 
@@ -1436,10 +1455,13 @@
                     arxiv: { keywords: ['cs.CL', 'cs.CV', 'cs.LG', 'cs.AI'], max_results_per_keyword: 100 },
                     notify: { channel: 'console', config: {} }
                 });
-                const wizardStepNames = ['欢迎', '数据库', '研究方向', 'LLM配置', 'ArXiv搜索', '通知渠道', '完成'];
-                const wizardNewKeyword = ref('');  // ArXiv关键词输入
+                const wizardStepNames = ['欢迎', '数据库', 'LLM配置', '研究方向', 'ArXiv搜索', '通知渠道', '完成'];
+                const wizardNewKeyword = ref('');
+                const researchBrief = ref('');
+                const generatingResearch = ref(false);
+                const aiGeneratedKeywords = ref([]);
 
-                // 常用ArXiv分类
+                const arxivCategories = [
                 const arxivCategories = [
                     { code: 'cs.CL', name: '计算语言学' },
                     { code: 'cs.CV', name: '计算机视觉' },
@@ -1575,12 +1597,15 @@
                 };
 
                 const nextWizardStep = async () => {
-                    // 每步保存配置
                     await saveWizardStepData();
                     if (wizardStep.value < 7) {
+                        if (wizardStep.value === 4 && aiGeneratedKeywords.value.length > 0) {
+                            const existing = new Set(wizardData.value.arxiv.keywords);
+                            aiGeneratedKeywords.value.forEach(kw => existing.add(kw));
+                            wizardData.value.arxiv.keywords = Array.from(existing);
+                        }
                         wizardStep.value++;
                     } else {
-                        // 最后一步：完成向导
                         await completeWizard();
                     }
                 };
@@ -1609,18 +1634,16 @@
                                 body: JSON.stringify({ config: wizardData.value.db })
                             });
                         } else if (step === 3) {
-                            // 保存研究方向
-                            await fetch('/api/config/research_description', {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ config: { content: wizardData.value.research } })
-                            });
-                        } else if (step === 4) {
-                            // 保存LLM配置
                             await fetch('/api/config/llm_filter', {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ config: wizardData.value.llm })
+                            });
+                        } else if (step === 4) {
+                            await fetch('/api/config/research_description', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ config: { content: wizardData.value.research } })
                             });
                         } else if (step === 5) {
                             // 保存ArXiv配置
@@ -1766,7 +1789,32 @@
                     }
                 };
 
-                // 重新运行向导（从配置页触发）
+                const generateResearch = async () => {
+                    if (!researchBrief.value.trim()) return;
+                    
+                    generatingResearch.value = true;
+                    try {
+                        const res = await fetch('/api/setup/generate-research', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ brief: researchBrief.value })
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            wizardData.value.research = data.data.research_description;
+                            aiGeneratedKeywords.value = data.data.arxiv_keywords || [];
+                            showToast('AI 已生成研究方向描述！');
+                        } else {
+                            showToast(data.message || '生成失败', 'error');
+                        }
+                    } catch (e) {
+                        showToast('生成失败，请检查网络', 'error');
+                    } finally {
+                        generatingResearch.value = false;
+                    }
+                };
+
                 const reopenWizard = async () => {
                     // 预填充已有配置
                     try {
@@ -2352,11 +2400,11 @@
                         fetchLogContent, saveConfig, saveResearchDescription, confirmFilters,
                         // 向导相关
                         wizardOpen, wizardStep, wizardTesting, wizardTestResults, wizardData, wizardStepNames, wizardNewKeyword,
-                        existingConfig,
+                        existingConfig, researchBrief, generatingResearch, aiGeneratedKeywords,
                         arxivCategories, notifyChannelOptions, notifyChannelFields,
                         nextWizardStep, prevWizardStep, skipWizardStep, saveWizardStepData, completeWizard,
                         testDBConnection, testLLMConnection, testNotifyChannel, addArxivKeyword, removeArxivKeyword,
-                        loadExistingConfig, resetWizardData, openWizard
+                        loadExistingConfig, resetWizardData, openWizard, generateResearch
                     };
             }
         }).mount('#app');
