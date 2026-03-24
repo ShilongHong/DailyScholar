@@ -391,10 +391,21 @@
 
                 <!-- 配置视图 -->
                 <div v-if="currentView === 'config'" class="max-w-5xl mx-auto pb-10">
+                    <!-- 重新运行向导按钮 -->
+                    <div class="mb-4 flex justify-end">
+                        <button @click="openWizard" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            重新运行配置向导
+                        </button>
+                    </div>
+                    
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                         <div class="border-b border-gray-100">
                             <nav class="flex -mb-px">
-                                <button v-for="tab in ['llm_filter', 'research', 'arxiv', 'schedule']" :key="tab"
+                                <button v-for="tab in ['llm_filter', 'research', 'arxiv', 'schedule', 'notify']" :key="tab"
                                     @click="activeConfigTab = tab"
                                     :class="['px-6 py-4 text-sm font-medium border-b-2 transition-colors', activeConfigTab === tab ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']">
                                     {{ configTabNames[tab] }}
@@ -562,6 +573,178 @@
                                     <button @click="saveConfig('schedule')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存调度设置</button>
                                 </div>
                             </div>
+
+                            <!-- 通知渠道配置 -->
+                            <div v-if="activeConfigTab === 'notify' && configData && configData.notify" class="space-y-6">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-medium text-gray-900">通知渠道设置</h3>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">当前使用渠道</label>
+                                    <select v-model="configData.notify.active_channel" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                        <option value="console">控制台（无需配置）</option>
+                                        <option value="bark">Bark</option>
+                                        <option value="dingtalk_app">钉钉应用机器人</option>
+                                        <option value="dingtalk_webhook">钉钉Webhook机器人</option>
+                                        <option value="feishu">飞书机器人</option>
+                                        <option value="telegram">Telegram</option>
+                                        <option value="smtp">SMTP邮件</option>
+                                        <option value="wxpusher">WxPusher</option>
+                                    </select>
+                                </div>
+
+                                <!-- 渠道配置详情 -->
+                                <div v-if="configData.notify.active_channel === 'console'" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                    <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="configData.notify.channels.console.CONSOLE" class="rounded text-primary focus:ring-primary">
+                                        启用控制台输出
+                                    </label>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'bark'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_PUSH</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_PUSH" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_ARCHIVE</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_ARCHIVE" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_GROUP</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_GROUP" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_SOUND</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_SOUND" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_ICON</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_ICON" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_LEVEL</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_LEVEL" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">BARK_URL</label>
+                                        <input type="text" v-model="configData.notify.channels.bark.BARK_URL" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'dingtalk_app'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">App Key</label>
+                                        <input type="text" v-model="configData.notify.channels.dingtalk_app.app_key" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">App Secret</label>
+                                        <input type="password" v-model="configData.notify.channels.dingtalk_app.app_secret" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Robot Code</label>
+                                        <input type="text" v-model="configData.notify.channels.dingtalk_app.robot_code" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Open Conversation ID</label>
+                                        <input type="text" v-model="configData.notify.channels.dingtalk_app.open_conversation_id" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'dingtalk_webhook'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">DD_BOT_TOKEN</label>
+                                        <input type="text" v-model="configData.notify.channels.dingtalk_webhook.DD_BOT_TOKEN" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">DD_BOT_SECRET</label>
+                                        <input type="text" v-model="configData.notify.channels.dingtalk_webhook.DD_BOT_SECRET" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'feishu'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">FSKEY</label>
+                                        <input type="text" v-model="configData.notify.channels.feishu.FSKEY" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">FSSECRET</label>
+                                        <input type="text" v-model="configData.notify.channels.feishu.FSSECRET" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'telegram'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">TG_BOT_TOKEN</label>
+                                        <input type="text" v-model="configData.notify.channels.telegram.TG_BOT_TOKEN" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">TG_USER_ID</label>
+                                        <input type="text" v-model="configData.notify.channels.telegram.TG_USER_ID" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">TG_API_HOST</label>
+                                        <input type="text" v-model="configData.notify.channels.telegram.TG_API_HOST" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">TG_PROXY_HOST</label>
+                                        <input type="text" v-model="configData.notify.channels.telegram.TG_PROXY_HOST" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">TG_PROXY_PORT</label>
+                                        <input type="text" v-model="configData.notify.channels.telegram.TG_PROXY_PORT" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">TG_PROXY_AUTH</label>
+                                        <input type="text" v-model="configData.notify.channels.telegram.TG_PROXY_AUTH" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'smtp'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">SMTP_SERVER</label>
+                                        <input type="text" v-model="configData.notify.channels.smtp.SMTP_SERVER" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div class="pt-2">
+                                        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="configData.notify.channels.smtp.SMTP_SSL" class="rounded text-primary focus:ring-primary">
+                                            启用 SMTP SSL
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">SMTP_EMAIL</label>
+                                        <input type="text" v-model="configData.notify.channels.smtp.SMTP_EMAIL" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">SMTP_PASSWORD</label>
+                                        <input type="password" v-model="configData.notify.channels.smtp.SMTP_PASSWORD" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">SMTP_NAME</label>
+                                        <input type="text" v-model="configData.notify.channels.smtp.SMTP_NAME" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                </div>
+
+                                <div v-if="configData.notify.active_channel === 'wxpusher'" class="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">WXPUSHER_APP_TOKEN</label>
+                                        <input type="text" v-model="configData.notify.channels.wxpusher.WXPUSHER_APP_TOKEN" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50" placeholder="必填">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">WXPUSHER_TOPIC_IDS</label>
+                                        <input type="text" v-model="configData.notify.channels.wxpusher.WXPUSHER_TOPIC_IDS" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">WXPUSHER_UIDS</label>
+                                        <input type="text" v-model="configData.notify.channels.wxpusher.WXPUSHER_UIDS" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-end pt-4">
+                                    <button @click="saveConfig('notify')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存通知设置</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -699,6 +882,498 @@
             </div>
         </div>
 
+        <!-- ========== 配置向导覆盖层 ========== -->
+        <div v-if="wizardOpen" class="fixed inset-0 z-[60] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+                <!-- 向导头部 -->
+                <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-primary/5 to-secondary/5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center text-white">
+                                <i class="ph ph-magic-wand text-lg"></i>
+                            </div>
+                            <h2 class="text-xl font-bold text-gray-900">系统配置向导</h2>
+                        </div>
+                        <span class="text-sm text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200">步骤 {{ wizardStep }} / 7</span>
+                    </div>
+                    <!-- 步骤指示器 -->
+                    <div class="flex mt-4 gap-1">
+                        <div v-for="n in 7" :key="n" class="flex-1 h-2 rounded-full transition-all duration-300"
+                            :class="n < wizardStep ? 'bg-green-400' : n === wizardStep ? 'bg-primary' : 'bg-gray-200'"></div>
+                    </div>
+                    <div class="flex mt-2 gap-1">
+                        <div v-for="(name, idx) in wizardStepNames" :key="idx" class="flex-1 text-center text-xs"
+                            :class="idx + 1 <= wizardStep ? 'text-primary font-medium' : 'text-gray-400'">
+                            {{ name }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 向导内容区 -->
+                <div class="flex-1 overflow-y-auto p-6">
+
+                    <!-- Step 1: 欢迎页 -->
+                    <div v-if="wizardStep === 1" class="text-center py-8 max-w-2xl mx-auto">
+                        <div class="w-20 h-20 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-primary/30">
+                            <i class="ph ph-book-open-text text-4xl"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-gray-900 mb-4">欢迎使用 Paper2Data</h3>
+                        <p class="text-gray-600 text-lg mb-6 leading-relaxed">
+                            您的 AI 科研情报助手。本系统会自动从 ArXiv 获取论文，通过 LLM 智能筛选与您研究方向相关的论文，并推送到您常用的通知渠道。
+                        </p>
+                        
+                        <!-- 检测到已有配置提示 -->
+                        <div v-if="existingConfig && (existingConfig.has_mysql || existingConfig.has_llm || existingConfig.has_research)" 
+                            class="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 text-left">
+                            <div class="flex items-start gap-3">
+                                <i class="ph ph-warning-circle text-2xl text-amber-600 flex-shrink-0 mt-0.5"></i>
+                                <div class="flex-1">
+                                    <h4 class="font-semibold text-amber-800 mb-2">检测到已有配置</h4>
+                                    <div class="flex flex-wrap gap-2 mb-3">
+                                        <span v-if="existingConfig.has_mysql" class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium">
+                                            <i class="ph ph-database"></i> 数据库
+                                        </span>
+                                        <span v-if="existingConfig.has_llm" class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium">
+                                            <i class="ph ph-brain"></i> LLM
+                                        </span>
+                                        <span v-if="existingConfig.has_research" class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium">
+                                            <i class="ph ph-target"></i> 研究方向
+                                        </span>
+                                        <span v-if="existingConfig.has_notify" class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium">
+                                            <i class="ph ph-bell"></i> 通知
+                                        </span>
+                                    </div>
+                                    <div class="flex flex-col sm:flex-row gap-2">
+                                        <button @click="wizardStep = 7" 
+                                            class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                                            <i class="ph ph-check-circle"></i> 使用现有配置
+                                        </button>
+                                        <button @click="wizardStep = 2" 
+                                            class="flex-1 px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
+                                            <i class="ph ph-pencil-simple"></i> 查看并修改
+                                        </button>
+                                        <button @click="resetWizardData" 
+                                            class="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+                                            清空重配
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                                <i class="ph ph-download-simple text-2xl text-blue-600 mb-2"></i>
+                                <h4 class="font-semibold text-gray-800 text-sm">自动获取</h4>
+                                <p class="text-xs text-gray-500 mt-1">每日定时从 ArXiv 获取最新论文</p>
+                            </div>
+                            <div class="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                                <i class="ph ph-brain text-2xl text-purple-600 mb-2"></i>
+                                <h4 class="font-semibold text-gray-800 text-sm">智能筛选</h4>
+                                <p class="text-xs text-gray-500 mt-1">LLM 评估论文与您研究的相关度</p>
+                            </div>
+                            <div class="bg-green-50 rounded-xl p-4 border border-green-100">
+                                <i class="ph ph-paper-plane-right text-2xl text-green-600 mb-2"></i>
+                                <h4 class="font-semibold text-gray-800 text-sm">即时推送</h4>
+                                <p class="text-xs text-gray-500 mt-1">推送到钉钉、飞书、Telegram 等</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-400">接下来将引导您完成 6 个配置步骤，预计需要 3-5 分钟。</p>
+                    </div>
+
+                    <!-- Step 2: 数据库配置 -->
+                    <div v-if="wizardStep === 2" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-database text-xl text-blue-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">数据库配置</h3>
+                                <p class="text-sm text-gray-500">配置 MySQL 数据库连接，用于存储论文数据</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">主机地址</label>
+                                    <input type="text" v-model="wizardData.db.host" placeholder="例如: localhost 或 192.168.1.100"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">端口</label>
+                                    <input type="number" v-model="wizardData.db.port" placeholder="3306"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                                    <input type="text" v-model="wizardData.db.user" placeholder="数据库用户名"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                                    <input type="password" v-model="wizardData.db.password" placeholder="数据库密码"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">数据库名称</label>
+                                <input type="text" v-model="wizardData.db.database" placeholder="例如: dailypaper"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                            </div>
+                        </div>
+
+                        <!-- 测试连接按钮 -->
+                        <div class="mt-6 flex items-center gap-4">
+                            <button @click="testDBConnection" :disabled="wizardTesting"
+                                class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                                <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-plugs-connected'" class="text-lg"></i>
+                                {{ wizardTesting ? '测试中...' : '测试连接' }}
+                            </button>
+                            <div v-if="wizardTestResults.db" class="flex items-center gap-2 text-sm">
+                                <i :class="wizardTestResults.db.success ? 'ph-fill ph-check-circle text-green-500' : 'ph-fill ph-x-circle text-red-500'" class="text-lg"></i>
+                                <span :class="wizardTestResults.db.success ? 'text-green-700' : 'text-red-700'">
+                                    {{ wizardTestResults.db.message || (wizardTestResults.db.success ? '连接成功' : '连接失败') }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                            <div class="flex items-start gap-2">
+                                <i class="ph ph-info text-amber-600 text-lg mt-0.5"></i>
+                                <div class="text-sm text-amber-800">
+                                    <p class="font-medium mb-1">提示</p>
+                                    <p>如果暂时没有数据库，可以点击"跳过"继续配置其他项。系统支持无数据库模式运行（部分功能受限）。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: 研究方向 -->
+                    <div v-if="wizardStep === 3" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-compass text-xl text-purple-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">研究方向描述</h3>
+                                <p class="text-sm text-gray-500">描述您的研究方向，LLM 会根据此描述评估论文相关度</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <textarea v-model="wizardData.research" rows="12"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm font-mono leading-relaxed"
+                                placeholder="请详细描述您的研究方向，例如：&#10;&#10;我的研究方向是多模态大模型在医疗影像中的应用。&#10;重点关注：&#10;1. CLIP 模型在 X 光片上的微调策略&#10;2. 医疗报告自动生成 (Report Generation)&#10;3. 视觉问答 (VQA) 在病理切片上的应用&#10;&#10;不感兴趣的方向：&#10;- 纯 NLP 文本摘要&#10;- 传统 CNN 图像分割算法"></textarea>
+                        </div>
+
+                        <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div class="flex items-start gap-2">
+                                <i class="ph ph-lightbulb text-blue-600 text-lg mt-0.5"></i>
+                                <div class="text-sm text-blue-800">
+                                    <p class="font-medium mb-1">写作建议</p>
+                                    <ul class="space-y-1 list-disc list-inside text-blue-700">
+                                        <li>描述越详细，AI 筛选越精准</li>
+                                        <li>可以列出关键词、技术方向、关注的问题</li>
+                                        <li>明确指出不感兴趣的方向有助于减少噪音</li>
+                                        <li>可以使用中文或英文</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: LLM 配置 -->
+                    <div v-if="wizardStep === 4" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-brain text-xl text-green-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">LLM 配置</h3>
+                                <p class="text-sm text-gray-500">配置用于论文筛选和翻译的大语言模型 API</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                                <input type="password" v-model="wizardData.llm.api_key" placeholder="sk-..."
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                <p class="mt-1 text-xs text-gray-400">支持 OpenAI 兼容的 API（如 OpenAI、DeepSeek、SiliconFlow 等）</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
+                                <input type="text" v-model="wizardData.llm.base_url" placeholder="https://api.openai.com/v1"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
+                                <input type="text" v-model="wizardData.llm.model" placeholder="例如: gpt-4o-mini, deepseek-chat"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                            </div>
+                        </div>
+
+                        <!-- 测试API按钮 -->
+                        <div class="mt-6 flex items-center gap-4">
+                            <button @click="testLLMConnection" :disabled="wizardTesting"
+                                class="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                                <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-flask'" class="text-lg"></i>
+                                {{ wizardTesting ? '测试中...' : '测试 API' }}
+                            </button>
+                            <div v-if="wizardTestResults.llm" class="flex items-center gap-2 text-sm">
+                                <i :class="wizardTestResults.llm.success ? 'ph-fill ph-check-circle text-green-500' : 'ph-fill ph-x-circle text-red-500'" class="text-lg"></i>
+                                <span :class="wizardTestResults.llm.success ? 'text-green-700' : 'text-red-700'">
+                                    {{ wizardTestResults.llm.message || (wizardTestResults.llm.success ? 'API 连接成功' : 'API 连接失败') }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: ArXiv 搜索配置 -->
+                    <div v-if="wizardStep === 5" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-magnifying-glass text-xl text-orange-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">ArXiv 搜索配置</h3>
+                                <p class="text-sm text-gray-500">选择要关注的 ArXiv 分类和关键词</p>
+                            </div>
+                        </div>
+
+                        <!-- 常用分类快速选择 -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-3">常用分类（点击切换）</label>
+                            <div class="flex flex-wrap gap-2">
+                                <button v-for="cat in arxivCategories" :key="cat.code"
+                                    @click="toggleArxivCategory(cat.code)"
+                                    :class="['px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                                        wizardData.arxiv.keywords.includes(cat.code)
+                                            ? 'bg-primary text-white border-primary'
+                                            : 'bg-white text-gray-600 border-gray-300 hover:border-primary hover:text-primary']">
+                                    {{ cat.code }} <span class="opacity-70">{{ cat.name }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 已选关键词 -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">已选关键词/分类</label>
+                            <div class="flex flex-wrap gap-2 min-h-[40px] p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <span v-for="(kw, idx) in wizardData.arxiv.keywords" :key="idx"
+                                    class="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-sm rounded-full">
+                                    {{ kw }}
+                                    <button @click="removeArxivKeyword(idx)" class="hover:text-red-500 transition-colors">
+                                        <i class="ph ph-x text-xs"></i>
+                                    </button>
+                                </span>
+                                <span v-if="wizardData.arxiv.keywords.length === 0" class="text-sm text-gray-400">暂无关键词，请从上方选择或手动添加</span>
+                            </div>
+                        </div>
+
+                        <!-- 自定义关键词输入 -->
+                        <div class="flex gap-2 mb-6">
+                            <input type="text" v-model="wizardNewKeyword" @keyup.enter="addArxivKeyword()" placeholder="输入自定义关键词，按回车添加"
+                                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                            <button @click="addArxivKeyword()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                                <i class="ph ph-plus"></i> 添加
+                            </button>
+                        </div>
+
+                        <!-- 每个关键词最大结果数 -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">每个关键词最大结果数</label>
+                            <input type="number" v-model="wizardData.arxiv.max_results_per_keyword" min="10" max="500" placeholder="100"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                            <p class="mt-1 text-xs text-gray-400">建议 50-200，过大会增加获取时间</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 6: 通知渠道配置 -->
+                    <div v-if="wizardStep === 6" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-bell-ringing text-xl text-pink-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">通知渠道配置</h3>
+                                <p class="text-sm text-gray-500">选择论文推送的通知方式</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">选择通知渠道</label>
+                                <select v-model="wizardData.notify.channel" @change="wizardData.notify.config = {}; wizardTestResults.notify = null;"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                    <option v-for="opt in notifyChannelOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                                </select>
+                            </div>
+
+                            <!-- Console无需配置 -->
+                            <div v-if="wizardData.notify.channel === 'console'" class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div class="flex items-center gap-2 text-sm text-gray-600">
+                                    <i class="ph ph-terminal-window text-lg"></i>
+                                    <span>控制台模式无需额外配置，论文信息将输出到服务器日志中。适合开发调试使用。</span>
+                                </div>
+                            </div>
+
+                            <!-- 动态渠道配置表单 -->
+                            <div v-if="wizardData.notify.channel !== 'console' && notifyChannelFields[wizardData.notify.channel]"
+                                class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                                <div v-for="field in notifyChannelFields[wizardData.notify.channel]" :key="field.key">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                                        {{ field.label }}
+                                        <span v-if="field.required" class="text-red-500">*</span>
+                                    </label>
+                                    <input :type="field.type || 'text'" v-model="wizardData.notify.config[field.key]"
+                                        :placeholder="field.required ? '必填' : '选填'"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 测试通知按钮 -->
+                        <div class="mt-6 flex items-center gap-4">
+                            <button @click="testNotifyChannel" :disabled="wizardTesting"
+                                class="px-5 py-2.5 bg-pink-600 text-white rounded-lg text-sm font-medium hover:bg-pink-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                                <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-paper-plane-right'" class="text-lg"></i>
+                                {{ wizardTesting ? '测试中...' : '测试通知' }}
+                            </button>
+                            <div v-if="wizardTestResults.notify" class="flex items-center gap-2 text-sm">
+                                <i :class="wizardTestResults.notify.success ? 'ph-fill ph-check-circle text-green-500' : 'ph-fill ph-x-circle text-red-500'" class="text-lg"></i>
+                                <span :class="wizardTestResults.notify.success ? 'text-green-700' : 'text-red-700'">
+                                    {{ wizardTestResults.notify.message || (wizardTestResults.notify.success ? '通知测试成功' : '通知测试失败') }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 7: 配置摘要 & 完成 -->
+                    <div v-if="wizardStep === 7" class="max-w-2xl mx-auto">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                <i class="ph ph-check-circle text-xl text-emerald-600"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">配置完成</h3>
+                                <p class="text-sm text-gray-500">请确认以下配置信息</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <!-- 数据库摘要 -->
+                            <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-medium text-gray-800 flex items-center gap-2">
+                                        <i class="ph ph-database text-blue-600"></i> 数据库
+                                    </h4>
+                                    <span v-if="wizardTestResults.db && wizardTestResults.db.success" class="text-xs text-green-600 flex items-center gap-1">
+                                        <i class="ph-fill ph-check-circle"></i> 已验证
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600" v-if="wizardData.db.host">
+                                    {{ wizardData.db.host }}:{{ wizardData.db.port }} / {{ wizardData.db.database }}（{{ wizardData.db.user }}）
+                                </p>
+                                <p class="text-sm text-gray-400" v-else>未配置</p>
+                            </div>
+
+                            <!-- 研究方向摘要 -->
+                            <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <h4 class="font-medium text-gray-800 flex items-center gap-2 mb-2">
+                                    <i class="ph ph-compass text-purple-600"></i> 研究方向
+                                </h4>
+                                <p class="text-sm text-gray-600 line-clamp-3" v-if="wizardData.research">{{ wizardData.research }}</p>
+                                <p class="text-sm text-gray-400" v-else>未配置</p>
+                            </div>
+
+                            <!-- LLM 摘要 -->
+                            <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-medium text-gray-800 flex items-center gap-2">
+                                        <i class="ph ph-brain text-green-600"></i> LLM 配置
+                                    </h4>
+                                    <span v-if="wizardTestResults.llm && wizardTestResults.llm.success" class="text-xs text-green-600 flex items-center gap-1">
+                                        <i class="ph-fill ph-check-circle"></i> 已验证
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600" v-if="wizardData.llm.model">
+                                    模型: {{ wizardData.llm.model }} | Base URL: {{ wizardData.llm.base_url || '默认' }} | API Key: {{ wizardData.llm.api_key ? '****' + wizardData.llm.api_key.slice(-4) : '未设置' }}
+                                </p>
+                                <p class="text-sm text-gray-400" v-else>未配置</p>
+                            </div>
+
+                            <!-- ArXiv 摘要 -->
+                            <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <h4 class="font-medium text-gray-800 flex items-center gap-2 mb-2">
+                                    <i class="ph ph-magnifying-glass text-orange-600"></i> ArXiv 搜索
+                                </h4>
+                                <div v-if="wizardData.arxiv.keywords.length > 0" class="flex flex-wrap gap-1.5">
+                                    <span v-for="kw in wizardData.arxiv.keywords" :key="kw"
+                                        class="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">{{ kw }}</span>
+                                </div>
+                                <p class="text-sm text-gray-400" v-else>未配置</p>
+                            </div>
+
+                            <!-- 通知渠道摘要 -->
+                            <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-medium text-gray-800 flex items-center gap-2">
+                                        <i class="ph ph-bell-ringing text-pink-600"></i> 通知渠道
+                                    </h4>
+                                    <span v-if="wizardTestResults.notify && wizardTestResults.notify.success" class="text-xs text-green-600 flex items-center gap-1">
+                                        <i class="ph-fill ph-check-circle"></i> 已验证
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600">
+                                    {{ notifyChannelOptions.find(o => o.value === wizardData.notify.channel)?.label || wizardData.notify.channel }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                            <div class="flex items-start gap-2">
+                                <i class="ph ph-rocket-launch text-emerald-600 text-lg mt-0.5"></i>
+                                <div class="text-sm text-emerald-800">
+                                    <p class="font-medium mb-1">准备就绪！</p>
+                                    <p>点击"完成配置"后，系统将开始按照您的设置自动运行。您可以随时在"系统配置"页面修改任何设置。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- 向导底部按钮 -->
+                <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                    <div>
+                        <button v-if="wizardStep > 1" @click="prevWizardStep"
+                            class="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
+                            <i class="ph ph-arrow-left"></i> 上一步
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button v-if="wizardStep > 1 && wizardStep < 7" @click="skipWizardStep"
+                            class="px-4 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors">
+                            跳过
+                        </button>
+                        <button @click="nextWizardStep"
+                            :class="['px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm',
+                                wizardStep === 7
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/30'
+                                    : 'bg-primary text-white hover:bg-primary/90 shadow-primary/30']">
+                            <span v-if="wizardStep === 1">开始配置 <i class="ph ph-arrow-right"></i></span>
+                            <span v-else-if="wizardStep === 7"><i class="ph ph-check"></i> 完成配置</span>
+                            <span v-else>下一步 <i class="ph ph-arrow-right"></i></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -728,7 +1403,8 @@
                     'llm_filter': 'LLM 筛选',
                     'research': '研究方向',
                     'arxiv': 'ArXiv 搜索',
-                    'schedule': '定时任务'
+                    'schedule': '定时任务',
+                    'notify': '通知渠道'
                 };
 
                 // 筛选状态
@@ -745,6 +1421,413 @@
                 const currentPage = ref(1);
                 const pageSize = ref(20);
                 const totalCount = ref(0);
+
+                // ========== 配置向导状态 ==========
+                const wizardOpen = ref(false);
+                const wizardStep = ref(1);
+                const wizardTesting = ref(false);  // 测试按钮加载状态
+                const wizardTestResults = ref({ db: null, llm: null, notify: null }); // 测试结果
+                const existingConfig = ref(null);  // 已有配置检测结果
+                const configCheckDone = ref(false); // 配置检测是否完成
+                const wizardData = ref({
+                    db: { host: '', port: 3306, user: '', password: '', database: '' },
+                    research: '',
+                    llm: { api_key: '', base_url: '', model: '' },
+                    arxiv: { keywords: ['cs.CL', 'cs.CV', 'cs.LG', 'cs.AI'], max_results_per_keyword: 100 },
+                    notify: { channel: 'console', config: {} }
+                });
+                const wizardStepNames = ['欢迎', '数据库', '研究方向', 'LLM配置', 'ArXiv搜索', '通知渠道', '完成'];
+                const wizardNewKeyword = ref('');  // ArXiv关键词输入
+
+                // 常用ArXiv分类
+                const arxivCategories = [
+                    { code: 'cs.CL', name: '计算语言学' },
+                    { code: 'cs.CV', name: '计算机视觉' },
+                    { code: 'cs.LG', name: '机器学习' },
+                    { code: 'cs.AI', name: '人工智能' },
+                    { code: 'cs.IR', name: '信息检索' },
+                    { code: 'cs.RO', name: '机器人学' },
+                    { code: 'cs.NE', name: '神经与进化计算' },
+                    { code: 'cs.CR', name: '密码学与安全' },
+                    { code: 'cs.SE', name: '软件工程' },
+                    { code: 'cs.DC', name: '分布式计算' },
+                    { code: 'cs.NI', name: '网络与互联网' },
+                    { code: 'stat.ML', name: '统计机器学习' },
+                    { code: 'eess.SP', name: '信号处理' },
+                    { code: 'eess.IV', name: '图像与视频处理' }
+                ];
+
+                // 通知渠道选项
+                const notifyChannelOptions = [
+                    { value: 'console', label: '控制台（无需配置）' },
+                    { value: 'bark', label: 'Bark' },
+                    { value: 'dingtalk_app', label: '钉钉应用机器人' },
+                    { value: 'dingtalk_webhook', label: '钉钉Webhook机器人' },
+                    { value: 'feishu', label: '飞书机器人' },
+                    { value: 'telegram', label: 'Telegram' },
+                    { value: 'smtp', label: 'SMTP邮件' },
+                    { value: 'wxpusher', label: 'WxPusher' }
+                ];
+
+                // 通知渠道配置字段定义
+                const notifyChannelFields = {
+                    bark: [
+                        { key: 'BARK_PUSH', label: 'BARK_PUSH', required: true },
+                        { key: 'BARK_ARCHIVE', label: 'BARK_ARCHIVE' },
+                        { key: 'BARK_GROUP', label: 'BARK_GROUP' },
+                        { key: 'BARK_SOUND', label: 'BARK_SOUND' },
+                        { key: 'BARK_ICON', label: 'BARK_ICON' }
+                    ],
+                    dingtalk_app: [
+                        { key: 'app_key', label: 'App Key', required: true },
+                        { key: 'app_secret', label: 'App Secret', type: 'password', required: true },
+                        { key: 'robot_code', label: 'Robot Code', required: true },
+                        { key: 'open_conversation_id', label: 'Open Conversation ID', required: true }
+                    ],
+                    dingtalk_webhook: [
+                        { key: 'DD_BOT_TOKEN', label: 'DD_BOT_TOKEN', required: true },
+                        { key: 'DD_BOT_SECRET', label: 'DD_BOT_SECRET' }
+                    ],
+                    feishu: [
+                        { key: 'FSKEY', label: 'FSKEY', required: true },
+                        { key: 'FSSECRET', label: 'FSSECRET' }
+                    ],
+                    telegram: [
+                        { key: 'TG_BOT_TOKEN', label: 'TG_BOT_TOKEN', required: true },
+                        { key: 'TG_USER_ID', label: 'TG_USER_ID', required: true },
+                        { key: 'TG_API_HOST', label: 'TG_API_HOST' }
+                    ],
+                    smtp: [
+                        { key: 'SMTP_SERVER', label: 'SMTP_SERVER', required: true },
+                        { key: 'SMTP_EMAIL', label: 'SMTP_EMAIL', required: true },
+                        { key: 'SMTP_PASSWORD', label: 'SMTP_PASSWORD', type: 'password', required: true },
+                        { key: 'SMTP_NAME', label: 'SMTP_NAME', required: true }
+                    ],
+                    wxpusher: [
+                        { key: 'WXPUSHER_APP_TOKEN', label: 'WXPUSHER_APP_TOKEN', required: true },
+                        { key: 'WXPUSHER_TOPIC_IDS', label: 'WXPUSHER_TOPIC_IDS' },
+                        { key: 'WXPUSHER_UIDS', label: 'WXPUSHER_UIDS' }
+                    ]
+                };
+
+                // ========== 向导方法 ==========
+
+                // 加载已有配置并预填充向导
+                const loadExistingConfig = async () => {
+                    try {
+                        const res = await fetch('/api/setup/existing-config');
+                        const data = await res.json();
+                        if (data.success) {
+                            existingConfig.value = data.data;
+                            configCheckDone.value = true;
+                            if (data.data.mysql) {
+                                wizardData.value.db = {
+                                    host: data.data.mysql.host || '',
+                                    port: data.data.mysql.port || 3306,
+                                    user: data.data.mysql.user || '',
+                                    password: '',
+                                    database: data.data.mysql.database || ''
+                                };
+                            }
+                            if (data.data.research_description) {
+                                wizardData.value.research = data.data.research_description;
+                            }
+                            if (data.data.llm) {
+                                wizardData.value.llm = {
+                                    api_key: '',
+                                    base_url: data.data.llm.base_url || '',
+                                    model: data.data.llm.model || ''
+                                };
+                            }
+                            if (data.data.arxiv) {
+                                wizardData.value.arxiv.keywords = data.data.arxiv.keywords || [];
+                            }
+                            if (data.data.notify) {
+                                wizardData.value.notify.channel = data.data.notify.active_channel || 'console';
+                            }
+                        }
+                    } catch (e) {
+                        console.error('加载现有配置失败:', e);
+                    }
+                };
+
+                // 重置向导数据为默认值
+                const resetWizardData = () => {
+                    wizardData.value = {
+                        db: { host: '', port: 3306, user: '', password: '', database: '' },
+                        research: '',
+                        llm: { api_key: '', base_url: '', model: '' },
+                        arxiv: { keywords: ['cs.CL', 'cs.CV', 'cs.LG', 'cs.AI'], max_results_per_keyword: 100 },
+                        notify: { channel: 'console', config: {} }
+                    };
+                    wizardTestResults.value = { db: null, llm: null, notify: null };
+                    wizardStep.value = 2;
+                };
+
+                // 打开向导（先加载已有配置）
+                const openWizard = async () => {
+                    configCheckDone.value = false;
+                    existingConfig.value = null;
+                    await loadExistingConfig();
+                    wizardStep.value = 1;
+                    wizardTestResults.value = { db: null, llm: null, notify: null };
+                    wizardOpen.value = true;
+                };
+
+                const nextWizardStep = async () => {
+                    // 每步保存配置
+                    await saveWizardStepData();
+                    if (wizardStep.value < 7) {
+                        wizardStep.value++;
+                    } else {
+                        // 最后一步：完成向导
+                        await completeWizard();
+                    }
+                };
+
+                const prevWizardStep = () => {
+                    if (wizardStep.value > 1) {
+                        wizardStep.value--;
+                    }
+                };
+
+                const skipWizardStep = () => {
+                    if (wizardStep.value < 7) {
+                        wizardStep.value++;
+                    }
+                };
+
+                // 保存当前步骤数据
+                const saveWizardStepData = async () => {
+                    try {
+                        const step = wizardStep.value;
+                        if (step === 2) {
+                            // 保存数据库配置
+                            await fetch('/api/config/mysql', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ config: wizardData.value.db })
+                            });
+                        } else if (step === 3) {
+                            // 保存研究方向
+                            await fetch('/api/config/research_description', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ config: { content: wizardData.value.research } })
+                            });
+                        } else if (step === 4) {
+                            // 保存LLM配置
+                            await fetch('/api/config/llm_filter', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ config: wizardData.value.llm })
+                            });
+                        } else if (step === 5) {
+                            // 保存ArXiv配置
+                            await fetch('/api/config/arxiv', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ config: { keywords: wizardData.value.arxiv.keywords, max_results_per_keyword: wizardData.value.arxiv.max_results_per_keyword } })
+                            });
+                        } else if (step === 6) {
+                            // 保存通知渠道配置
+                            const notifyConfig = {
+                                active_channel: wizardData.value.notify.channel,
+                                channels: {}
+                            };
+                            notifyConfig.channels[wizardData.value.notify.channel] = wizardData.value.notify.config;
+                            await fetch('/api/config/notify', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ config: notifyConfig })
+                            });
+                        }
+                    } catch (e) {
+                        console.error('保存向导步骤数据失败:', e);
+                    }
+                };
+
+                // 完成向导
+                const completeWizard = async () => {
+                    try {
+                        const res = await fetch('/api/setup/complete', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.success) {
+                            wizardOpen.value = false;
+                            wizardStep.value = 1;
+                            showToast('配置向导已完成！系统已就绪。');
+                            // 刷新配置和数据
+                            await refreshAll();
+                        } else {
+                            showToast(data.message || '完成配置失败', 'error');
+                        }
+                    } catch (e) {
+                        showToast('完成配置失败', 'error');
+                    }
+                };
+
+                // 测试数据库连接
+                const testDBConnection = async () => {
+                    wizardTesting.value = true;
+                    wizardTestResults.value.db = null;
+                    try {
+                        const res = await fetch('/api/setup/test-db', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(wizardData.value.db)
+                        });
+                        const data = await res.json();
+                        wizardTestResults.value.db = data;
+                        if (data.success) {
+                            showToast('数据库连接成功！');
+                        } else {
+                            showToast(data.message || '数据库连接失败', 'error');
+                        }
+                    } catch (e) {
+                        wizardTestResults.value.db = { success: false, message: '请求失败，请检查网络' };
+                        showToast('测试请求失败', 'error');
+                    } finally {
+                        wizardTesting.value = false;
+                    }
+                };
+
+                // 测试LLM连接
+                const testLLMConnection = async () => {
+                    wizardTesting.value = true;
+                    wizardTestResults.value.llm = null;
+                    try {
+                        const res = await fetch('/api/setup/test-llm', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(wizardData.value.llm)
+                        });
+                        const data = await res.json();
+                        wizardTestResults.value.llm = data;
+                        if (data.success) {
+                            showToast('LLM API 连接成功！');
+                        } else {
+                            showToast(data.message || 'LLM API 连接失败', 'error');
+                        }
+                    } catch (e) {
+                        wizardTestResults.value.llm = { success: false, message: '请求失败，请检查网络' };
+                        showToast('测试请求失败', 'error');
+                    } finally {
+                        wizardTesting.value = false;
+                    }
+                };
+
+                // 测试通知渠道
+                const testNotifyChannel = async () => {
+                    wizardTesting.value = true;
+                    wizardTestResults.value.notify = null;
+                    try {
+                        const res = await fetch('/api/setup/test-notify', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                channel: wizardData.value.notify.channel,
+                                config: wizardData.value.notify.config
+                            })
+                        });
+                        const data = await res.json();
+                        wizardTestResults.value.notify = data;
+                        if (data.success) {
+                            showToast('通知测试成功！');
+                        } else {
+                            showToast(data.message || '通知测试失败', 'error');
+                        }
+                    } catch (e) {
+                        wizardTestResults.value.notify = { success: false, message: '请求失败，请检查网络' };
+                        showToast('测试请求失败', 'error');
+                    } finally {
+                        wizardTesting.value = false;
+                    }
+                };
+
+                // ArXiv关键词管理
+                const addArxivKeyword = (keyword) => {
+                    const kw = (keyword || wizardNewKeyword.value).trim();
+                    if (kw && !wizardData.value.arxiv.keywords.includes(kw)) {
+                        wizardData.value.arxiv.keywords.push(kw);
+                    }
+                    wizardNewKeyword.value = '';
+                };
+
+                const removeArxivKeyword = (index) => {
+                    wizardData.value.arxiv.keywords.splice(index, 1);
+                };
+
+                const toggleArxivCategory = (code) => {
+                    const idx = wizardData.value.arxiv.keywords.indexOf(code);
+                    if (idx >= 0) {
+                        wizardData.value.arxiv.keywords.splice(idx, 1);
+                    } else {
+                        wizardData.value.arxiv.keywords.push(code);
+                    }
+                };
+
+                // 重新运行向导（从配置页触发）
+                const reopenWizard = async () => {
+                    // 预填充已有配置
+                    try {
+                        const res = await fetch('/api/config/all');
+                        const data = await res.json();
+                        if (data.success) {
+                            const config = data.data;
+                            // 填充数据库配置
+                            if (config.mysql) {
+                                wizardData.value.db = {
+                                    host: config.mysql.host || '',
+                                    port: config.mysql.port || 3306,
+                                    user: config.mysql.user || '',
+                                    password: config.mysql.password || '',
+                                    database: config.mysql.database || ''
+                                };
+                            }
+                            // 填充研究方向
+                            if (config.research_description) {
+                                wizardData.value.research = config.research_description;
+                            }
+                            // 填充LLM配置
+                            if (config.llm_filter) {
+                                wizardData.value.llm = {
+                                    api_key: config.llm_filter.api_key || '',
+                                    base_url: config.llm_filter.base_url || '',
+                                    model: config.llm_filter.model || ''
+                                };
+                            }
+                            // 填充ArXiv配置
+                            if (config.arxiv && config.arxiv.keywords) {
+                                wizardData.value.arxiv.keywords = [...config.arxiv.keywords];
+                                wizardData.value.arxiv.max_results_per_keyword = config.arxiv.max_results_per_keyword || 100;
+                            }
+                            // 填充通知配置
+                            if (config.notify) {
+                                wizardData.value.notify.channel = config.notify.active_channel || 'console';
+                                wizardData.value.notify.config = config.notify.channels?.[config.notify.active_channel] || {};
+                            }
+                        }
+                    } catch (e) {
+                        console.error('加载配置失败:', e);
+                    }
+                    wizardStep.value = 1;
+                    wizardTestResults.value = { db: null, llm: null, notify: null };
+                    wizardOpen.value = true;
+                };
+
+                // 首次运行检测
+                const checkFirstRun = async () => {
+                    try {
+                        const res = await fetch('/api/setup/status');
+                        const data = await res.json();
+                        if (data.success && data.data && data.data.needs_setup) {
+                            wizardOpen.value = true;
+                        }
+                    } catch (e) {
+                        // 如果端点不存在（还未部署后端），静默忽略
+                        console.warn('首次运行检测失败:', e);
+                    }
+                };
 
                 const viewTitle = computed(() => {
                     const map = {
@@ -1228,6 +2311,15 @@
                     refreshAll();
                     // 自动刷新
                     setInterval(fetchQueue, 30000);
+                    
+                    // 检查是否需要显示配置向导
+                    fetch('/api/setup/status')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.data?.needs_setup) {
+                                openWizard();
+                            }
+                        });
                 });
 
                 // 监听视图切换
@@ -1257,7 +2349,14 @@
                         logContent, logFiles, selectedLogFile, logContainer, configData, activeConfigTab, configTabNames,
                         fetchPapers, triggerAction, toggleMark, updateComment, deletePaper, retranslatePaper,
                         openDrawer, closeDrawer, refreshAll,
-                        fetchLogContent, saveConfig, saveResearchDescription, confirmFilters
+                        fetchLogContent, saveConfig, saveResearchDescription, confirmFilters,
+                        // 向导相关
+                        wizardOpen, wizardStep, wizardTesting, wizardTestResults, wizardData, wizardStepNames, wizardNewKeyword,
+                        existingConfig,
+                        arxivCategories, notifyChannelOptions, notifyChannelFields,
+                        nextWizardStep, prevWizardStep, skipWizardStep, saveWizardStepData, completeWizard,
+                        testDBConnection, testLLMConnection, testNotifyChannel, addArxivKeyword, removeArxivKeyword,
+                        loadExistingConfig, resetWizardData, openWizard
                     };
             }
         }).mount('#app');

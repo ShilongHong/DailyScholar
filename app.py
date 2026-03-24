@@ -165,6 +165,37 @@ def is_setup_complete(runtime_config: dict[str, Any]) -> bool:
     return runtime_config.get(SETUP_COMPLETE_KEY) is True
 
 
+def mask_sensitive_fields(config: object) -> object:
+    if isinstance(config, dict):
+        safe_config: dict[str, object] = {}
+        for key, value in cast(dict[object, object], config).items():
+            safe_key = str(key)
+            key_name = safe_key.lower()
+            if key_name == "keywords":
+                safe_config[safe_key] = mask_sensitive_fields(value)
+            elif key_name in {"secret", "password", "pwd"} or key_name.endswith(
+                ("_key", "_token", "_secret")
+            ):
+                safe_config[safe_key] = "***"
+            else:
+                safe_config[safe_key] = mask_sensitive_fields(value)
+        return safe_config
+    if isinstance(config, list):
+        return [mask_sensitive_fields(item) for item in cast(list[object], config)]
+    return config
+
+
+def _is_non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and value.strip() != ""
+
+
+def _get_runtime_section(runtime: dict[str, Any], name: str) -> dict[str, Any]:
+    section = runtime.get(name)
+    if isinstance(section, dict):
+        return cast(dict[str, Any], section)
+    return {}
+
+
 def get_config(name: str) -> dict[str, Any]:
     """获取配置（运行时配置优先）"""
     runtime = load_runtime_config()
@@ -1010,6 +1041,102 @@ async def get_setup_status():
     }
 
 
+@app.get("/api/setup/existing-config")
+async def get_existing_config():
+    runtime = cast(dict[str, Any], load_runtime_config() or {})
+
+    arxiv_config = _get_runtime_section(runtime, "arxiv")
+    llm_config = _get_runtime_section(runtime, "llm_filter")
+    notify_config = _get_runtime_section(runtime, "notify")
+    mysql_config = _get_runtime_section(arxiv_config, "mysql")
+
+    mysql_safe = mask_sensitive_fields(mysql_config)
+    llm_safe = mask_sensitive_fields(llm_config)
+    notify_safe = mask_sensitive_fields(notify_config)
+    arxiv_safe = mask_sensitive_fields(arxiv_config)
+
+    has_mysql = bool(
+        mysql_config
+        and mysql_config.get("enable", True) is True
+        and _is_non_empty_string(mysql_config.get("host"))
+        and _is_non_empty_string(mysql_config.get("database"))
+        and _is_non_empty_string(mysql_config.get("user"))
+        and _is_non_empty_string(mysql_config.get("password"))
+    )
+
+    has_llm = bool(
+        llm_config
+        and llm_config.get("enable", True) is True
+        and _is_non_empty_string(llm_config.get("base_url"))
+        and _is_non_empty_string(llm_config.get("model"))
+        and _is_non_empty_string(llm_config.get("api_key"))
+    )
+
+    research_description = runtime.get("research_description", "")
+    has_research = _is_non_empty_string(research_description)
+    research_preview = str(research_description).strip()[:100] if has_research else ""
+
+    has_notify = bool(
+        notify_config
+        and _is_non_empty_string(notify_config.get("active_channel"))
+        and isinstance(notify_config.get("channels"), dict)
+        and bool(cast(dict[str, Any], notify_config.get("channels")))
+    )
+
+    arxiv_keywords = arxiv_config.get("keywords")
+    has_arxiv = bool(
+        arxiv_config
+        and isinstance(arxiv_keywords, list)
+        and any(
+            _is_non_empty_string(item) for item in cast(list[object], arxiv_keywords)
+        )
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "has_mysql": has_mysql,
+            "has_llm": has_llm,
+            "has_research": has_research,
+            "has_notify": has_notify,
+            "has_arxiv": has_arxiv,
+            "mysql": {
+                "host": mysql_safe.get("host", "")
+                if isinstance(mysql_safe, dict)
+                else "",
+                "port": mysql_safe.get("port", 3306)
+                if isinstance(mysql_safe, dict)
+                else 3306,
+                "database": mysql_safe.get("database", "")
+                if isinstance(mysql_safe, dict)
+                else "",
+                "user": mysql_safe.get("user", "")
+                if isinstance(mysql_safe, dict)
+                else "",
+            },
+            "llm": {
+                "base_url": llm_safe.get("base_url", "")
+                if isinstance(llm_safe, dict)
+                else "",
+                "model": llm_safe.get("model", "")
+                if isinstance(llm_safe, dict)
+                else "",
+            },
+            "research_description": research_preview,
+            "notify": {
+                "active_channel": notify_safe.get("active_channel", "")
+                if isinstance(notify_safe, dict)
+                else "",
+            },
+            "arxiv": {
+                "keywords": arxiv_safe.get("keywords", [])
+                if isinstance(arxiv_safe, dict)
+                else [],
+            },
+        },
+    }
+
+
 @app.post("/api/setup/complete")
 async def complete_setup():
     """标记初始化完成"""
@@ -1041,23 +1168,6 @@ async def get_all_config():
     research_description = str(
         runtime.get("research_description", RESEARCH_DESCRIPTION)
     )
-
-    def mask_sensitive_fields(config: object) -> object:
-        if isinstance(config, dict):
-            safe_config: dict[str, object] = {}
-            for key, value in cast(dict[object, object], config).items():
-                safe_key = str(key)
-                key_name = safe_key.lower()
-                if any(
-                    s in key_name for s in ["key", "secret", "token", "password", "pwd"]
-                ):
-                    safe_config[safe_key] = "***"
-                else:
-                    safe_config[safe_key] = mask_sensitive_fields(value)
-            return safe_config
-        if isinstance(config, list):
-            return [mask_sensitive_fields(item) for item in cast(list[object], config)]
-        return config
 
     llm_raw = cast(dict[str, object], get_config("llm_filter") or {})
     notify_raw = cast(dict[str, object], get_config("notify") or {})
