@@ -1,3 +1,11 @@
+# Sisyphus (plan files, notepads, evidence - development only)
+.sisyphus/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
 # Python
 __pycache__/
 *.py[cod]
@@ -70,6 +78,9 @@ nul
 
 # Node (if building frontend)
 node_modules/
+
+# Git worktrees
+.worktrees/
 
 # Database (local MySQL backups)
 *.sql
