@@ -120,7 +120,6 @@ def load_runtime_config() -> dict[str, Any]:
     try:
         configs = get_all_configs_from_db()
         if configs:
-            logger.info(f"从数据库加载了 {len(configs)} 个配置")
             return configs
     except Exception as e:
         logger.warning(f"从数据库加载配置失败: {e}")
@@ -130,11 +129,9 @@ def load_runtime_config() -> dict[str, Any]:
         try:
             with open(RUNTIME_CONFIG_FILE, "r", encoding="utf-8") as f:
                 configs = json.load(f)
-                logger.info(f"从文件加载了 {len(configs)} 个配置")
                 # 迁移到数据库
                 for name, value in configs.items():
                     save_config_to_db(name, value)
-                logger.info("已将文件配置迁移到数据库")
                 return configs
         except Exception as e:
             logger.warning(f"从文件加载配置失败: {e}")
@@ -478,7 +475,6 @@ class PaperScheduler:
         if fetch_config.get("enable", True):
             fetch_time = fetch_config.get("time", "02:00")
             schedule.every().day.at(fetch_time).do(run_fetch_papers)
-            logger.info(f"📅 论文获取任务已设置: 每天 {fetch_time}")
 
         # 论文推送任务
         push_config = config.get("push_papers", {})
@@ -486,15 +482,12 @@ class PaperScheduler:
             push_times = push_config.get("times", ["09:00", "14:30"])
             for push_time in push_times:
                 schedule.every().day.at(push_time).do(run_push_papers)
-            logger.info(f"📅 论文推送任务已设置: 每天 {', '.join(push_times)}")
 
     def _run_loop(self):
         """调度循环"""
-        logger.info("⏰ 调度器已启动")
         while self.running:
             schedule.run_pending()
             time.sleep(30)
-        logger.info("⏰ 调度器已停止")
 
     def start(self):
         """启动调度器"""
@@ -504,19 +497,16 @@ class PaperScheduler:
         self.running = True
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
-        logger.info("✅ 后台调度器已启动")
 
     def stop(self):
         """停止调度器"""
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
-        logger.info("⏹️ 后台调度器已停止")
 
     def reload(self):
         """重新加载配置"""
         self._setup_jobs()
-        logger.info("🔄 调度器配置已重新加载")
 
     def get_status(self) -> dict[str, Any]:
         """获取调度器状态"""

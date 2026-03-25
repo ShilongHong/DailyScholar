@@ -461,8 +461,28 @@
                                         <label class="block text-sm font-medium text-gray-700 mb-1">Max Tokens</label>
                                         <input type="number" min="256" max="8192" v-model="configData.llm_filter.max_tokens" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
                                     </div>
+
+                                    <div class="border-t border-gray-200 pt-6 space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <h4 class="text-base font-medium text-gray-900">筛选提示词</h4>
+                                                <p class="text-sm text-gray-500 mt-1">这些提示词会直接影响论文筛选结果，可查看、编辑并立即生效。</p>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">系统提示词</label>
+                                            <textarea v-model="configData.prompt_config.llm_system_prompt" rows="5" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50 font-mono text-sm"></textarea>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">评估模板</label>
+                                            <textarea v-model="configData.prompt_config.llm_evaluation_template" rows="12" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50 font-mono text-sm"></textarea>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="flex justify-end pt-4">
+                                <div class="flex justify-end gap-3 pt-4">
+                                    <button @click="saveConfig('prompt_config')" class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">保存筛选提示词</button>
                                     <button @click="saveConfig('llm_filter')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存 LLM 设置</button>
                                 </div>
                             </div>
@@ -680,7 +700,7 @@
                                 
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">当前使用渠道</label>
-                                    <select v-model="configData.notify.active_channel" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+                                    <select v-model="configData.notify.active_channel" @change="ensureNotifyChannelConfig(configData.notify.active_channel)" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
                                         <option value="console">控制台（无需配置）</option>
                                         <option value="bark">Bark</option>
                                         <option value="dingtalk_app">钉钉应用机器人</option>
@@ -1284,7 +1304,7 @@
                             <p class="text-xs text-gray-500 mt-1">描述越具体，AI 筛选越准确</p>
                         </div>
                         
-                        <div v-if="aiGeneratedKeywords.length > 0" class="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <div v-if="aiGeneratedKeywords.length > 0" class="bg-green-50 rounded-lg p-4 border border-green-200 mb-4">
                             <div class="flex items-center gap-2 mb-2">
                                 <i class="ph ph-lightning text-green-600"></i>
                                 <span class="text-sm font-medium text-green-800">AI 推荐的 ArXiv 分类</span>
@@ -1296,6 +1316,104 @@
                                 </span>
                             </div>
                             <p class="text-xs text-gray-500 mt-2">这些关键词将在下一步自动填入</p>
+                        </div>
+
+                        <div v-if="aiGeneratedLlmConfig && editableGeneratedConfig && editableGeneratedConfig.anchors && editableGeneratedConfig.examples" class="space-y-4" data-generated-config-section>
+                            <div class="bg-purple-50 rounded-xl p-5 border border-purple-200">
+                                <div class="flex items-center gap-2 mb-4">
+                                    <i class="ph ph-sparkle text-purple-600"></i>
+                                    <h4 class="text-sm font-semibold text-purple-900">AI 生成的筛选锚点（可编辑）</h4>
+                                </div>
+
+                                <div class="grid grid-cols-1 gap-4">
+                                    <div class="bg-white rounded-lg p-4 border border-purple-100">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="ph ph-trend-up text-green-600"></i>
+                                            <span class="text-sm font-medium text-gray-800">高分关键词</span>
+                                        </div>
+                                        <textarea v-model="editableGeneratedConfig.anchors.high" rows="4"
+                                            class="w-full px-3 py-2 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500/30 focus:border-green-400 text-sm"
+                                            placeholder="每行一个高分关键词"></textarea>
+                                        <p class="text-xs text-gray-500 mt-1">每行一个关键词，匹配这些内容的论文会获得更高分。</p>
+                                    </div>
+
+                                    <div class="bg-white rounded-lg p-4 border border-purple-100">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="ph ph-minus text-amber-600"></i>
+                                            <span class="text-sm font-medium text-gray-800">中等分数信号</span>
+                                        </div>
+                                        <textarea v-model="editableGeneratedConfig.anchors.medium" rows="3"
+                                            class="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 text-sm"
+                                            placeholder="每行一个中等分数信号"></textarea>
+                                    </div>
+
+                                    <div class="bg-white rounded-lg p-4 border border-purple-100">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="ph ph-trend-down text-red-600"></i>
+                                            <span class="text-sm font-medium text-gray-800">低分/排除关键词</span>
+                                        </div>
+                                        <textarea v-model="editableGeneratedConfig.anchors.low" rows="3"
+                                            class="w-full px-3 py-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500/30 focus:border-red-400 text-sm"
+                                            placeholder="每行一个低分或排除关键词"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-blue-50 rounded-xl p-5 border border-blue-200">
+                                <div class="flex items-center gap-2 mb-4">
+                                    <i class="ph ph-brain text-blue-600"></i>
+                                    <h4 class="text-sm font-semibold text-blue-900">AI 生成的评分示例（Few-shot，可编辑）</h4>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <div class="bg-white rounded-lg p-4 border border-blue-100" v-if="aiGeneratedLlmConfig.few_shot_examples?.high_score">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="ph ph-star text-green-600"></i>
+                                            <span class="text-sm font-medium text-gray-800">高分示例</span>
+                                            <input type="number" v-model="editableGeneratedConfig.examples.high.score" min="0" max="100"
+                                                class="w-20 px-2 py-1 text-xs border border-green-200 rounded bg-green-50 text-green-700">
+                                        </div>
+                                        <input type="text" v-model="editableGeneratedConfig.examples.high.title"
+                                            class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="高分示例标题">
+                                        <textarea v-model="editableGeneratedConfig.examples.high.abstract" rows="3"
+                                            class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="高分示例摘要"></textarea>
+                                        <textarea v-model="editableGeneratedConfig.examples.high.reason" rows="2"
+                                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="高分原因"></textarea>
+                                    </div>
+
+                                    <div class="bg-white rounded-lg p-4 border border-blue-100" v-if="aiGeneratedLlmConfig.few_shot_examples?.medium_score">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="ph ph-star-half text-amber-600"></i>
+                                            <span class="text-sm font-medium text-gray-800">中等分示例</span>
+                                            <input type="number" v-model="editableGeneratedConfig.examples.medium.score" min="0" max="100"
+                                                class="w-20 px-2 py-1 text-xs border border-amber-200 rounded bg-amber-50 text-amber-700">
+                                        </div>
+                                        <input type="text" v-model="editableGeneratedConfig.examples.medium.title"
+                                            class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="中等分示例标题">
+                                        <textarea v-model="editableGeneratedConfig.examples.medium.abstract" rows="3"
+                                            class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="中等分示例摘要"></textarea>
+                                        <textarea v-model="editableGeneratedConfig.examples.medium.reason" rows="2"
+                                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="中等分原因"></textarea>
+                                    </div>
+
+                                    <div class="bg-white rounded-lg p-4 border border-blue-100" v-if="aiGeneratedLlmConfig.few_shot_examples?.low_score">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="ph ph-star text-red-600"></i>
+                                            <span class="text-sm font-medium text-gray-800">低分示例</span>
+                                            <input type="number" v-model="editableGeneratedConfig.examples.low.score" min="0" max="100"
+                                                class="w-20 px-2 py-1 text-xs border border-red-200 rounded bg-red-50 text-red-700">
+                                        </div>
+                                        <input type="text" v-model="editableGeneratedConfig.examples.low.title"
+                                            class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="低分示例标题">
+                                        <textarea v-model="editableGeneratedConfig.examples.low.abstract" rows="3"
+                                            class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="低分示例摘要"></textarea>
+                                        <textarea v-model="editableGeneratedConfig.examples.low.reason" rows="2"
+                                            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="低分原因"></textarea>
+                                    </div>
+                                </div>
+
+                                <p class="text-xs text-blue-700 mt-3">这些配置会在完成向导时自动保存到提示词配置中，后续也可以在“系统配置”里继续查看和修改。</p>
+                            </div>
                         </div>
                     </div>
 
@@ -1680,6 +1798,18 @@
                 const generatingResearch = ref(false);
                 const aiGeneratedKeywords = ref([]);
                 const aiGeneratedLlmConfig = ref(null);  // AI 生成的 LLM 筛选配置
+                const editableGeneratedConfig = ref({
+                    anchors: {
+                        high: '',
+                        medium: '',
+                        low: ''
+                    },
+                    examples: {
+                        high: { title: '', abstract: '', score: 90, reason: '' },
+                        medium: { title: '', abstract: '', score: 60, reason: '' },
+                        low: { title: '', abstract: '', score: 15, reason: '' }
+                    }
+                });
 
                 const arxivCategories = [
                     { code: 'cs.CL', name: '计算语言学' },
@@ -1751,6 +1881,19 @@
                     ]
                 };
 
+                const ensureNotifyChannelConfig = (channel) => {
+                    if (!configData.value) return;
+                    if (!configData.value.notify) {
+                        configData.value.notify = { active_channel: 'console', channels: {} };
+                    }
+                    if (!configData.value.notify.channels) {
+                        configData.value.notify.channels = {};
+                    }
+                    if (!configData.value.notify.channels[channel]) {
+                        configData.value.notify.channels[channel] = channel === 'console' ? { CONSOLE: true } : {};
+                    }
+                };
+
                 // ========== 向导方法 ==========
 
                 // 加载已有配置并预填充向导
@@ -1761,7 +1904,7 @@
                         if (data.success) {
                             existingConfig.value = data.data;
                             configCheckDone.value = true;
-                            if (data.data.mysql) {
+                            if (data.data.has_mysql && data.data.mysql) {
                                 wizardData.value.db = {
                                     db_type: data.data.mysql.db_type || 'mysql',
                                     host: data.data.mysql.host || '',
@@ -1908,7 +2051,19 @@
                     try {
                         // 如果有 AI 生成的 LLM 配置，先保存到 prompt_config
                         if (aiGeneratedLlmConfig.value) {
-                            const config = aiGeneratedLlmConfig.value;
+                            const config = {
+                                ...aiGeneratedLlmConfig.value,
+                                scoring_anchors: {
+                                    high_score_keywords: editableGeneratedConfig.value.anchors.high.split('\n').map(v => v.trim()).filter(Boolean),
+                                    medium_score_keywords: editableGeneratedConfig.value.anchors.medium.split('\n').map(v => v.trim()).filter(Boolean),
+                                    low_score_keywords: editableGeneratedConfig.value.anchors.low.split('\n').map(v => v.trim()).filter(Boolean)
+                                },
+                                few_shot_examples: {
+                                    high_score: { ...editableGeneratedConfig.value.examples.high },
+                                    medium_score: { ...editableGeneratedConfig.value.examples.medium },
+                                    low_score: { ...editableGeneratedConfig.value.examples.low }
+                                }
+                            };
                             
                             // 构建 scoring_anchors 字符串
                             if (config.scoring_anchors) {
@@ -2123,9 +2278,58 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                         if (data.success) {
                             wizardData.value.research = data.data.research_description;
                             aiGeneratedKeywords.value = data.data.arxiv_keywords || [];
-                            // 保存 AI 生成的 LLM 筛选配置
                             aiGeneratedLlmConfig.value = data.data.llm_config || null;
-                            showToast('AI 已生成研究方向描述和筛选配置！');
+                            if (aiGeneratedLlmConfig.value) {
+                                const anchors = aiGeneratedLlmConfig.value.scoring_anchors || {};
+                                const examples = aiGeneratedLlmConfig.value.few_shot_examples || {};
+
+                                const highAnchors = (anchors.high_score_keywords || []).join('\n');
+                                const mediumAnchors = (anchors.medium_score_keywords || []).join('\n');
+                                const lowAnchors = (anchors.low_score_keywords || []).join('\n');
+
+                                editableGeneratedConfig.value = {
+                                    anchors: {
+                                        high: highAnchors,
+                                        medium: mediumAnchors,
+                                        low: lowAnchors
+                                    },
+                                    examples: {
+                                        high: {
+                                            title: examples.high_score?.title || '',
+                                            abstract: examples.high_score?.abstract || '',
+                                            score: examples.high_score?.score || 90,
+                                            reason: examples.high_score?.reason || ''
+                                        },
+                                        medium: {
+                                            title: examples.medium_score?.title || '',
+                                            abstract: examples.medium_score?.abstract || '',
+                                            score: examples.medium_score?.score || 60,
+                                            reason: examples.medium_score?.reason || ''
+                                        },
+                                        low: {
+                                            title: examples.low_score?.title || '',
+                                            abstract: examples.low_score?.abstract || '',
+                                            score: examples.low_score?.score || 15,
+                                            reason: examples.low_score?.reason || ''
+                                        }
+                                    }
+                                };
+
+                                if (configData.value) {
+                                    configData.value.scoring_anchors_high = highAnchors;
+                                    configData.value.scoring_anchors_medium = mediumAnchors;
+                                    configData.value.scoring_anchors_low = lowAnchors;
+                                    configData.value.few_shot_high = JSON.stringify(editableGeneratedConfig.value.examples.high, null, 2);
+                                    configData.value.few_shot_medium = JSON.stringify(editableGeneratedConfig.value.examples.medium, null, 2);
+                                    configData.value.few_shot_low = JSON.stringify(editableGeneratedConfig.value.examples.low, null, 2);
+                                }
+
+                                nextTick(() => {
+                                    const el = document.querySelector('[data-generated-config-section]');
+                                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                });
+                            }
+                            showToast('AI 已生成研究方向描述、锚点和评分示例！');
                         } else {
                             showToast(data.message || '生成失败', 'error');
                         }
@@ -2396,6 +2600,22 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                             if (config.schedule.push_papers.times) {
                                 config.schedule.push_papers.times_str = config.schedule.push_papers.times.join(', ');
                             }
+
+                            if (!config.prompt_config) {
+                                config.prompt_config = {};
+                            }
+
+                            if (!config.notify) {
+                                config.notify = { active_channel: 'console', channels: {} };
+                            }
+                            if (!config.notify.channels) {
+                                config.notify.channels = {};
+                            }
+                            ['console','bark','dingtalk_app','dingtalk_webhook','feishu','telegram','smtp','wxpusher'].forEach(ch => {
+                                if (!config.notify.channels[ch]) {
+                                    config.notify.channels[ch] = ch === 'console' ? { CONSOLE: true } : {};
+                                }
+                            });
                             
                             // 初始化评分锚点和示例字段
                             config.scoring_anchors_high = '';
@@ -2424,17 +2644,31 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                                 // 解析评分示例
                                 if (promptConfig.llm_few_shot_examples) {
                                     const examplesText = promptConfig.llm_few_shot_examples;
-                                    const highExMatch = examplesText.match(/### 高分示例\n(.*?)\n\n###/s);
-                                    const mediumExMatch = examplesText.match(/### 中等示例\n(.*?)\n\n###/s);
-                                    const lowExMatch = examplesText.match(/### 低分示例\n(.*?)$/s);
-                                    
-                                    config.few_shot_high = highExMatch ? highExMatch[1].trim() : '';
-                                    config.few_shot_medium = mediumExMatch ? mediumExMatch[1].trim() : '';
-                                    config.few_shot_low = lowExMatch ? lowExMatch[1].trim() : '';
+                                    const matchSection = (patterns) => {
+                                        for (const pattern of patterns) {
+                                            const match = examplesText.match(pattern);
+                                            if (match && match[1]) return match[1].trim();
+                                        }
+                                        return '';
+                                    };
+
+                                    config.few_shot_high = matchSection([
+                                        /### 高分示例\n(.*?)\n\n###/s,
+                                        /### 示例1（高分论文）\n(.*?)\n\n###/s
+                                    ]);
+                                    config.few_shot_medium = matchSection([
+                                        /### 中等示例\n(.*?)\n\n###/s,
+                                        /### 示例2（中等分数论文）\n(.*?)\n\n###/s
+                                    ]);
+                                    config.few_shot_low = matchSection([
+                                        /### 低分示例\n(.*?)$/s,
+                                        /### 示例3（低分论文）\n(.*?)$/s
+                                    ]);
                                 }
                             }
                             
                             configData.value = config;
+                            ensureNotifyChannelConfig(config.notify.active_channel || 'console');
                         }
                     } catch (e) {
                         showToast('获取配置失败', 'error');
@@ -2445,6 +2679,24 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                     if (!configData.value) return;
                     
                     try {
+                        if (section === 'prompt_config') {
+                            const promptConfig = configData.value.prompt_config || {};
+                            const savePrompt = async (key, content) => {
+                                const res = await fetch(`/api/prompts/${key}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ content: content || '' })
+                                });
+                                return res.json();
+                            };
+
+                            await savePrompt('llm_system_prompt', promptConfig.llm_system_prompt);
+                            await savePrompt('llm_evaluation_template', promptConfig.llm_evaluation_template);
+                            await fetchConfig();
+                            showToast('筛选提示词已保存');
+                            return;
+                        }
+
                         const config = JSON.parse(JSON.stringify(configData.value[section]));
                         
                         // 处理字符串转数组
@@ -2461,6 +2713,9 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                                 .map(t => t.trim())
                                 .filter(t => t);
                             delete config.push_papers.times_str;
+                        }
+                        if (section === 'notify') {
+                            ensureNotifyChannelConfig(configData.value.notify.active_channel || 'console');
                         }
 
                         const res = await fetch(`/api/config/${section}`, {
@@ -2516,29 +2771,22 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                         // 2. 构建并保存评分锚点
                         const anchorsText = `## 评分参考锚点\n\n### 高分信号（每项可得20-25分）\n${configData.value.scoring_anchors_high || ''}\n\n### 中等分数信号（每项10-19分）\n${configData.value.scoring_anchors_medium || ''}\n\n### 低分信号（每项0-9分）\n${configData.value.scoring_anchors_low || ''}`;
                         
-                        await fetch('/api/config/prompt_config', {
+                        await fetch('/api/prompts/llm_scoring_anchors', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                config: {
-                                    llm_scoring_anchors: anchorsText
-                                }
-                            })
+                            body: JSON.stringify({ content: anchorsText })
                         });
                         
                         // 3. 构建并保存评分示例
                         const examplesText = `## 评分示例\n\n### 高分示例\n${configData.value.few_shot_high || ''}\n\n### 中等示例\n${configData.value.few_shot_medium || ''}\n\n### 低分示例\n${configData.value.few_shot_low || ''}`;
                         
-                        await fetch('/api/config/prompt_config', {
+                        await fetch('/api/prompts/llm_few_shot_examples', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                config: {
-                                    llm_few_shot_examples: examplesText
-                                }
-                            })
+                            body: JSON.stringify({ content: examplesText })
                         });
-                        
+
+                        await fetchConfig();
                         showToast('研究方向配置已保存');
                     } catch (e) {
                         console.error('保存失败:', e);
@@ -2806,7 +3054,7 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                         fetchLogContent, saveConfig, saveResearchDescription, saveResearchConfig, confirmFilters,
                         // 向导相关
                         wizardOpen, wizardStep, wizardTesting, wizardTestResults, wizardData, wizardStepNames, wizardNewKeyword,
-                        existingConfig, researchBrief, generatingResearch, aiGeneratedKeywords, aiGeneratedLlmConfig,
+                        existingConfig, researchBrief, generatingResearch, aiGeneratedKeywords, aiGeneratedLlmConfig, editableGeneratedConfig,
                         arxivCategories, notifyChannelOptions, notifyChannelFields,
                         nextWizardStep, prevWizardStep, skipWizardStep, saveWizardStepData, completeWizard,
                         testDBConnection, testLLMConnection, testNotifyChannel, addArxivKeyword, removeArxivKeyword,
