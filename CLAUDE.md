@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an **ArXiv Paper Push System v3.0** - a three-in-one academic paper recommendation system that combines FastAPI backend, built-in scheduler, and static frontend server. It automatically fetches papers from arXiv, uses LLM to filter relevant papers, translates them to Chinese, and pushes notifications to DingTalk.
+This is **DailyScholar v3.0** (formerly ArXiv Paper Push System) - a three-in-one academic paper recommendation system that combines FastAPI backend, built-in scheduler, and static frontend server. It automatically fetches papers from arXiv, uses LLM to filter relevant papers, translates them to Chinese, and pushes notifications to DingTalk.
 
 **Port**: 20001
 **Main Entry**: [app.py](app.py)
