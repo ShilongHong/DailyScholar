@@ -1353,6 +1353,28 @@
                             </div>
                         </div>
 
+                        <!-- AI 筛选配置预览 -->
+                        <div v-if="aiGeneratedLlmConfig" class="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <div class="flex items-center gap-2 mb-3">
+                                <i class="ph ph-sparkle text-purple-600"></i>
+                                <span class="font-medium text-purple-800">AI 生成的筛选配置</span>
+                            </div>
+                            <div class="space-y-2 text-sm text-gray-700">
+                                <div class="flex justify-between">
+                                    <span>高分关键词</span>
+                                    <span class="text-gray-500">{{ (aiGeneratedLlmConfig.scoring_anchors?.high_score_keywords || []).slice(0, 5).join(', ') }}...</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>排除关键词</span>
+                                    <span class="text-gray-500">{{ (aiGeneratedLlmConfig.scoring_anchors?.low_score_keywords || []).slice(0, 3).join(', ') }}...</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>建议筛选阈值</span>
+                                    <span class="font-medium">{{ aiGeneratedLlmConfig.suggested_min_score || 60 }}分</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mt-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
                             <div class="flex items-start gap-2">
                                 <i class="ph ph-rocket-launch text-emerald-600 text-lg mt-0.5"></i>
@@ -1460,8 +1482,8 @@
                 const researchBrief = ref('');
                 const generatingResearch = ref(false);
                 const aiGeneratedKeywords = ref([]);
+                const aiGeneratedLlmConfig = ref(null);  // AI 生成的 LLM 筛选配置
 
-                const arxivCategories = [
                 const arxivCategories = [
                     { code: 'cs.CL', name: '计算语言学' },
                     { code: 'cs.CV', name: '计算机视觉' },
@@ -1673,13 +1695,99 @@
                 // 完成向导
                 const completeWizard = async () => {
                     try {
+                        // 如果有 AI 生成的 LLM 配置，先保存到 prompt_config
+                        if (aiGeneratedLlmConfig.value) {
+                            const config = aiGeneratedLlmConfig.value;
+                            
+                            // 构建 scoring_anchors 字符串
+                            if (config.scoring_anchors) {
+                                const anchors = config.scoring_anchors;
+                                const anchorsText = `## 评分参考锚点
+
+### 高分信号（每项可得20-25分）
+**问题相关关键词**：${(anchors.high_score_keywords || []).join(', ')}
+
+**方法相关关键词**：视觉语言模型、多模态方法、深度学习架构
+
+**数据/资源关键词**：开源数据集、可复现代码
+
+### 中等分数信号（每项10-19分）
+${(anchors.medium_score_keywords || []).map(k => `- ${k}`).join('\n')}
+
+### 低分信号（每项0-9分）
+${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
+                                
+                                await fetch('/api/config/prompt_config', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                        config: { 
+                                            llm_scoring_anchors: anchorsText 
+                                        } 
+                                    })
+                                });
+                            }
+                            
+                            // 构建 few_shot_examples 字符串
+                            if (config.few_shot_examples) {
+                                const examples = config.few_shot_examples;
+                                const examplesText = `## 评分示例
+
+### 示例1（高分论文）
+标题：${examples.high_score?.title || '高相关论文'}
+摘要：${examples.high_score?.abstract || ''}
+
+评估结果：
+\`\`\`json
+{
+  "total_score": ${examples.high_score?.score || 90},
+  "reason": "${examples.high_score?.reason || '高度相关'}"
+}
+\`\`\`
+
+### 示例2（中等分数论文）
+标题：${examples.medium_score?.title || '中等相关论文'}
+摘要：${examples.medium_score?.abstract || ''}
+
+评估结果：
+\`\`\`json
+{
+  "total_score": ${examples.medium_score?.score || 60},
+  "reason": "${examples.medium_score?.reason || '中等相关'}"
+}
+\`\`\`
+
+### 示例3（低分论文）
+标题：${examples.low_score?.title || '低相关论文'}
+摘要：${examples.low_score?.abstract || ''}
+
+评估结果：
+\`\`\`json
+{
+  "total_score": ${examples.low_score?.score || 15},
+  "reason": "${examples.low_score?.reason || '不相关'}"
+}
+\`\`\``;
+                                
+                                await fetch('/api/config/prompt_config', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                        config: { 
+                                            llm_few_shot_examples: examplesText 
+                                        } 
+                                    })
+                                });
+                            }
+                        }
+                        
+                        // 标记配置完成
                         const res = await fetch('/api/setup/complete', { method: 'POST' });
                         const data = await res.json();
                         if (data.success) {
                             wizardOpen.value = false;
                             wizardStep.value = 1;
                             showToast('配置向导已完成！系统已就绪。');
-                            // 刷新配置和数据
                             await refreshAll();
                         } else {
                             showToast(data.message || '完成配置失败', 'error');
@@ -1804,7 +1912,9 @@
                         if (data.success) {
                             wizardData.value.research = data.data.research_description;
                             aiGeneratedKeywords.value = data.data.arxiv_keywords || [];
-                            showToast('AI 已生成研究方向描述！');
+                            // 保存 AI 生成的 LLM 筛选配置
+                            aiGeneratedLlmConfig.value = data.data.llm_config || null;
+                            showToast('AI 已生成研究方向描述和筛选配置！');
                         } else {
                             showToast(data.message || '生成失败', 'error');
                         }
@@ -2400,7 +2510,7 @@
                         fetchLogContent, saveConfig, saveResearchDescription, confirmFilters,
                         // 向导相关
                         wizardOpen, wizardStep, wizardTesting, wizardTestResults, wizardData, wizardStepNames, wizardNewKeyword,
-                        existingConfig, researchBrief, generatingResearch, aiGeneratedKeywords,
+                        existingConfig, researchBrief, generatingResearch, aiGeneratedKeywords, aiGeneratedLlmConfig,
                         arxivCategories, notifyChannelOptions, notifyChannelFields,
                         nextWizardStep, prevWizardStep, skipWizardStep, saveWizardStepData, completeWizard,
                         testDBConnection, testLLMConnection, testNotifyChannel, addArxivKeyword, removeArxivKeyword,

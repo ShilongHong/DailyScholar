@@ -812,20 +812,42 @@ def _normalize_arxiv_keywords(keywords: object) -> list[str]:
 def generate_research_description(
     brief: str, llm_config: dict[str, Any]
 ) -> dict[str, Any]:
-    prompt = f"""你是一位学术研究顾问。请根据用户的一句话研究方向描述，生成详细的研究方向说明。
+    prompt = f"""你是一位学术研究顾问。请根据用户的一句话研究方向描述，生成完整的研究配置。
 
 用户输入：{brief}
 
-请生成：
-1. 详细的研究方向描述（200-400字，包含核心主题、相关技术、潜在应用）
-2. 推荐的 ArXiv 分类（从以下选择最相关的3-6个：cs.CV, cs.CL, cs.AI, cs.LG, cs.IR, cs.RO, cs.NE, eess.IV, eess.SP, stat.ML）
-3. 应该排除的研究方向
-
-请以 JSON 格式返回：
+请生成以下内容（纯JSON格式，不要markdown代码块）：
 {{
-  "research_description": "...",
-  "arxiv_keywords": [...],
-  "excluded_fields": [...]
+  "research_description": "详细的研究方向描述（200-400字，包含核心主题、相关技术、潜在应用）",
+  "arxiv_keywords": ["cs.CV", "cs.CL", ...],
+  "llm_config": {{
+    "scoring_anchors": {{
+      "high_score_keywords": ["关键词1", "关键词2", ...],
+      "medium_score_keywords": ["关键词1", ...],
+      "low_score_keywords": ["关键词1", ...]
+    }},
+    "few_shot_examples": {{
+      "high_score": {{
+        "title": "高分论文标题示例",
+        "abstract": "摘要示例...",
+        "score": 90,
+        "reason": "高分原因"
+      }},
+      "medium_score": {{
+        "title": "中等分数论文标题示例",
+        "abstract": "摘要示例...",
+        "score": 60,
+        "reason": "中等原因"
+      }},
+      "low_score": {{
+        "title": "低分论文标题示例",
+        "abstract": "摘要示例...",
+        "score": 15,
+        "reason": "低分原因"
+      }}
+    }},
+    "suggested_min_score": 60
+  }}
 }}"""
 
     base_url = str(llm_config.get("base_url", "")).strip()
@@ -875,21 +897,17 @@ def generate_research_description(
 
     result = _extract_json_payload(content)
     research_description = str(result.get("research_description", "")).strip()
-    excluded_fields_raw = result.get("excluded_fields", [])
-    excluded_fields = (
-        [str(item).strip() for item in excluded_fields_raw if str(item).strip()]
-        if isinstance(excluded_fields_raw, list)
-        else []
-    )
 
     arxiv_keywords = _normalize_arxiv_keywords(result.get("arxiv_keywords", []))
+    llm_config_raw = result.get("llm_config", {})
+    llm_config_result = llm_config_raw if isinstance(llm_config_raw, dict) else {}
     if not research_description:
         raise ValueError("模型返回的研究方向描述为空")
 
     return {
         "research_description": research_description,
         "arxiv_keywords": arxiv_keywords,
-        "excluded_fields": excluded_fields,
+        "llm_config": llm_config_result,
     }
 
 
@@ -928,7 +946,7 @@ async def generate_research(request: GenerateResearchRequest):
     brief = request.brief.strip()
     llm_config = get_config("llm_filter")
 
-    logger.info(f"开始生成研究方向描述: brief={brief[:80]}")
+    logger.info(f"开始生成研究配置: brief={brief[:80]}")
 
     try:
         data = await asyncio.to_thread(
@@ -936,12 +954,12 @@ async def generate_research(request: GenerateResearchRequest):
         )
         return {"success": True, "data": data}
     except httpx.TimeoutException:
-        logger.warning("生成研究方向描述超时")
-        return {"success": False, "message": "生成研究方向描述超时，请稍后重试"}
+        logger.warning("生成研究配置超时")
+        return {"success": False, "message": "生成研究配置超时，请稍后重试"}
     except Exception as e:
         error_message = str(e).strip() or "未知错误"
-        logger.warning(f"生成研究方向描述失败: {error_message}")
-        return {"success": False, "message": f"生成研究方向描述失败: {error_message}"}
+        logger.warning(f"生成研究配置失败: {error_message}")
+        return {"success": False, "message": f"生成研究配置失败: {error_message}"}
 
 
 @app.post("/api/setup/test-notify")
