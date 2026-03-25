@@ -775,9 +775,12 @@ def _extract_json_payload(response_text: str) -> dict[str, Any]:
     end = text.rfind("}")
     if start >= 0 and end > start:
         candidate = text[start : end + 1]
-        parsed = json.loads(candidate)
-        if isinstance(parsed, dict):
-            return parsed
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
 
     raise ValueError("模型返回内容不是有效的 JSON")
 
@@ -876,8 +879,8 @@ def generate_research_description(
                     },
                     {"role": "user", "content": prompt},
                 ],
-                "temperature": 0.7,
-                "max_tokens": 1000,
+                "temperature": 0.4,
+                "max_tokens": 2500,
             },
         )
         response.raise_for_status()
@@ -957,9 +960,8 @@ async def generate_research(request: GenerateResearchRequest):
         logger.warning("生成研究配置超时")
         return {"success": False, "message": "生成研究配置超时，请稍后重试"}
     except Exception as e:
-        error_message = str(e).strip() or "未知错误"
-        logger.warning(f"生成研究配置失败: {error_message}")
-        return {"success": False, "message": f"生成研究配置失败: {error_message}"}
+        logger.error(f"生成研究配置失败: {str(e)}")
+        return {"success": False, "message": "生成研究配置失败，请稍后重试"}
 
 
 @app.post("/api/setup/test-notify")
