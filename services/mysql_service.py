@@ -20,6 +20,24 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 
+def _get_db_type() -> str:
+    """获取当前数据库类型"""
+    return ARXIV_CONFIG.get("mysql", {}).get("db_type", "sqlite")
+
+
+def _get_placeholder() -> str:
+    """获取参数占位符"""
+    return "?" if _get_db_type() == "sqlite" else "%s"
+
+
+def _normalize_sql(sql: str) -> str:
+    """按数据库类型规范化 SQL"""
+    if _get_db_type() == "sqlite":
+        sql = sql.replace("%s", "?")
+        sql = sql.replace("INSERT IGNORE", "INSERT OR IGNORE")
+    return sql
+
+
 def _normalize_publication_year(publication_year: Any) -> str:
     if publication_year is None:
         return ""
@@ -40,39 +58,70 @@ def _normalize_publication_year(publication_year: Any) -> str:
     return value
 
 
-def get_mysql_connection():
-    """获取当前线程的MySQL连接（线程安全）"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
-    if not mysql_config.get("enable", False):
+def get_db_connection():
+    """获取数据库连接（支持 MySQL 和 SQLite）"""
+    db_config = ARXIV_CONFIG.get("mysql", {})
+    if not db_config.get("enable", False):
         return None
 
-    # 检查当前线程是否已有连接
+    db_type = db_config.get("db_type", "sqlite")
+    if db_type == "sqlite":
+        return _get_sqlite_connection(db_config)
+    return _get_mysql_connection(db_config)
+
+
+def _get_sqlite_connection(db_config: Dict):
+    """获取 SQLite 连接"""
+    import os
+    import sqlite3
+
+    db_path = db_config.get("sqlite_path", "data/papers.db")
+    os.makedirs(
+        os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True
+    )
+
+    if (
+        hasattr(_thread_local, "sqlite_connection")
+        and _thread_local.sqlite_connection is not None
+    ):
+        return _thread_local.sqlite_connection
+
+    try:
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        _thread_local.sqlite_connection = conn
+        _ensure_sqlite_tables_exist(conn, db_config)
+        logger.info(f"✅ SQLite连接成功: {db_path}")
+        return conn
+    except Exception as e:
+        logger.warning(f"⚠️ SQLite连接失败: {str(e)}")
+        return None
+
+
+def _get_mysql_connection(db_config: Dict):
+    """获取当前线程的MySQL连接（线程安全）"""
     if hasattr(_thread_local, "connection") and _thread_local.connection is not None:
         try:
             _thread_local.connection.ping(reconnect=True)
             return _thread_local.connection
-        except:
+        except Exception:
             _thread_local.connection = None
 
-    # 为当前线程创建新连接
     try:
         import pymysql
 
         _thread_local.connection = pymysql.connect(
-            host=mysql_config.get("host", "localhost"),
-            port=mysql_config.get("port", 3306),
-            user=mysql_config.get("user", "root"),
-            password=mysql_config.get("password", ""),
-            database=mysql_config.get("database", "arxiv_papers"),
-            charset=mysql_config.get("charset", "utf8mb4"),
+            host=db_config.get("host", "localhost"),
+            port=db_config.get("port", 3306),
+            user=db_config.get("user", "root"),
+            password=db_config.get("password", ""),
+            database=db_config.get("database", "arxiv_papers"),
+            charset=db_config.get("charset", "utf8mb4"),
             cursorclass=pymysql.cursors.DictCursor,
         )
         thread_id = threading.current_thread().name
         logger.info(f"✅ MySQL连接成功 (线程: {thread_id})")
-
-        # 确保表存在
-        _ensure_tables_exist(_thread_local.connection, mysql_config)
-
+        _ensure_tables_exist(_thread_local.connection, db_config)
         return _thread_local.connection
     except ImportError:
         logger.warning("⚠️ pymysql未安装，跳过MySQL存储")
@@ -82,16 +131,123 @@ def get_mysql_connection():
         return None
 
 
+def _ensure_sqlite_tables_exist(conn, db_config: Dict):
+    """确保 SQLite 数据表存在"""
+    table_raw = db_config.get("table_raw", "papers_raw")
+    table_relevant = db_config.get("table_relevant", "papers_relevant")
+
+    cursor = conn.cursor()
+    cursor.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_raw} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            DOI TEXT UNIQUE,
+            Title TEXT,
+            Author TEXT,
+            Affiliation TEXT,
+            PublicationYear TEXT,
+            Abstract TEXT,
+            Link TEXT,
+            PDFLink TEXT,
+            Source TEXT,
+            SubjectTerms TEXT,
+            processed INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_relevant} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            DOI TEXT UNIQUE,
+            Title TEXT,
+            TitleCN TEXT,
+            Author TEXT,
+            Affiliation TEXT,
+            PublicationYear TEXT,
+            Abstract TEXT,
+            AbstractCN TEXT,
+            Link TEXT,
+            PDFLink TEXT,
+            Source TEXT,
+            SubjectTerms TEXT,
+            Stars INTEGER,
+            RelevanceReason TEXT,
+            PotentialHelp TEXT,
+            is_marked INTEGER DEFAULT 0,
+            comment TEXT,
+            is_pushed INTEGER DEFAULT 0,
+            pushed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS system_config (
+            config_name TEXT PRIMARY KEY,
+            config_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS paper_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            DOI TEXT UNIQUE,
+            Title TEXT,
+            TitleCN TEXT,
+            Author TEXT,
+            Affiliation TEXT,
+            PublicationYear TEXT,
+            Abstract TEXT,
+            AbstractCN TEXT,
+            Link TEXT,
+            PDFLink TEXT,
+            Source TEXT,
+            SubjectTerms TEXT,
+            Stars INTEGER,
+            RelevanceReason TEXT,
+            PotentialHelp TEXT,
+            paper_doi TEXT,
+            paper_data TEXT,
+            status TEXT DEFAULT 'pending',
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    conn.commit()
+
+
 def close_mysql_connection():
-    """关闭MySQL连接"""
-    global _mysql_connection
-    if _mysql_connection is not None:
+    """关闭数据库连接"""
+    db_type = _get_db_type()
+    if db_type == "sqlite":
+        conn = getattr(_thread_local, "sqlite_connection", None)
+        if conn is not None:
+            try:
+                conn.close()
+                logger.info("SQLite连接已关闭")
+            except Exception:
+                pass
+            _thread_local.sqlite_connection = None
+        return
+
+    conn = getattr(_thread_local, "connection", None)
+    if conn is not None:
         try:
-            _mysql_connection.close()
+            conn.close()
             logger.info("MySQL连接已关闭")
-        except:
+        except Exception:
             pass
-        _mysql_connection = None
+        _thread_local.connection = None
 
 
 def _ensure_tables_exist(conn, mysql_config: Dict):
@@ -240,32 +396,38 @@ def _ensure_tables_exist(conn, mysql_config: Dict):
         logger.info(
             f"✅ 数据表已确认: {table_raw}, {table_relevant}, system_config, paper_queue"
         )
+        return True
     except Exception as e:
         logger.warning(f"⚠️ 创建数据表时出错: {str(e)}")
+        return False
 
 
 def save_raw_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
     """将原始论文保存到MySQL"""
-    conn = get_mysql_connection()
+    conn = get_db_connection()
     if not conn or not papers:
         return 0
 
     mysql_config = ARXIV_CONFIG.get("mysql", {})
     table_raw = mysql_config.get("table_raw", "papers_raw")
+    db_type = _get_db_type()
 
     insert_sql = f"""
     INSERT IGNORE INTO `{table_raw}` 
     (DOI, Title, Author, Affiliation, PublicationYear, Abstract, Link, PDFLink, Source, SubjectTerms)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
+    if db_type == "sqlite":
+        insert_sql = insert_sql.replace("INSERT IGNORE", "INSERT OR IGNORE")
 
     saved_count = 0
     try:
-        with conn.cursor() as cursor:
+        if db_type == "sqlite":
+            cursor = conn.cursor()
             for paper in papers:
                 try:
                     cursor.execute(
-                        insert_sql,
+                        _normalize_sql(insert_sql),
                         (
                             paper.get("DOI", ""),
                             paper.get("Title", ""),
@@ -283,6 +445,31 @@ def save_raw_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
                 except Exception as e:
                     logger.debug(f"保存论文时跳过: {str(e)}")
                     continue
+        else:
+            with conn.cursor() as cursor:
+                for paper in papers:
+                    try:
+                        cursor.execute(
+                            _normalize_sql(insert_sql),
+                            (
+                                paper.get("DOI", ""),
+                                paper.get("Title", ""),
+                                paper.get("Author", ""),
+                                paper.get("Affiliation", ""),
+                                _normalize_publication_year(
+                                    paper.get("PublicationYear")
+                                ),
+                                paper.get("Abstract", ""),
+                                paper.get("Link", ""),
+                                paper.get("PDFLink", ""),
+                                paper.get("Source", ""),
+                                paper.get("SubjectTerms", ""),
+                            ),
+                        )
+                        saved_count += cursor.rowcount
+                    except Exception as e:
+                        logger.debug(f"保存论文时跳过: {str(e)}")
+                        continue
         conn.commit()
         logger.info(
             f"💾 MySQL: 保存了 {saved_count}/{len(papers)} 篇原始论文到 {table_raw}"
@@ -295,12 +482,13 @@ def save_raw_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
 
 def save_relevant_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
     """将相关论文保存到MySQL"""
-    conn = get_mysql_connection()
+    conn = get_db_connection()
     if not conn or not papers:
         return 0
 
     mysql_config = ARXIV_CONFIG.get("mysql", {})
     table_relevant = mysql_config.get("table_relevant", "papers_relevant")
+    db_type = _get_db_type()
 
     insert_sql = f"""
     INSERT IGNORE INTO `{table_relevant}` 
@@ -308,14 +496,17 @@ def save_relevant_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
      Link, PDFLink, Source, SubjectTerms, Stars, RelevanceReason, PotentialHelp)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
+    if db_type == "sqlite":
+        insert_sql = insert_sql.replace("INSERT IGNORE", "INSERT OR IGNORE")
 
     saved_count = 0
     try:
-        with conn.cursor() as cursor:
+        if db_type == "sqlite":
+            cursor = conn.cursor()
             for paper in papers:
                 try:
                     cursor.execute(
-                        insert_sql,
+                        _normalize_sql(insert_sql),
                         (
                             paper.get("DOI", ""),
                             paper.get("Title", ""),
@@ -339,6 +530,37 @@ def save_relevant_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
                 except Exception as e:
                     logger.debug(f"保存相关论文时跳过: {str(e)}")
                     continue
+        else:
+            with conn.cursor() as cursor:
+                for paper in papers:
+                    try:
+                        cursor.execute(
+                            _normalize_sql(insert_sql),
+                            (
+                                paper.get("DOI", ""),
+                                paper.get("Title", ""),
+                                paper.get("TitleCN", ""),
+                                paper.get("Author", ""),
+                                paper.get("Affiliation", ""),
+                                _normalize_publication_year(
+                                    paper.get("PublicationYear")
+                                ),
+                                paper.get("Abstract", ""),
+                                paper.get("AbstractCN", ""),
+                                paper.get("Link", ""),
+                                paper.get("PDFLink", ""),
+                                paper.get("Source", ""),
+                                paper.get("SubjectTerms", ""),
+                                paper.get("Stars", 0),
+                                paper.get("RelevanceReason", ""),
+                                paper.get("PotentialHelp", ""),
+                            ),
+                        )
+
+                        saved_count += cursor.rowcount
+                    except Exception as e:
+                        logger.debug(f"保存相关论文时跳过: {str(e)}")
+                        continue
         conn.commit()
         logger.info(
             f"💾 MySQL: 保存了 {saved_count}/{len(papers)} 篇相关论文到 {table_relevant}"
@@ -351,11 +573,19 @@ def save_relevant_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
 
 def execute_query(sql: str, params: tuple = None) -> List[Dict]:
     """执行查询SQL"""
-    conn = get_mysql_connection()
+    conn = get_db_connection()
     if not conn:
         return []
 
     try:
+        db_type = _get_db_type()
+        sql = _normalize_sql(sql)
+        params = params or ()
+        if db_type == "sqlite":
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
         with conn.cursor() as cursor:
             cursor.execute(sql, params)
             return cursor.fetchall()
@@ -366,15 +596,24 @@ def execute_query(sql: str, params: tuple = None) -> List[Dict]:
 
 def execute_update(sql: str, params: tuple = None) -> int:
     """执行更新SQL"""
-    conn = get_mysql_connection()
+    conn = get_db_connection()
     if not conn:
         return 0
 
     try:
+        db_type = _get_db_type()
+        sql = _normalize_sql(sql)
+        params = params or ()
+        if db_type == "sqlite":
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            conn.commit()
+            return cursor.rowcount
         with conn.cursor() as cursor:
             cursor.execute(sql, params)
+            rowcount = cursor.rowcount
         conn.commit()
-        return cursor.rowcount
+        return rowcount
     except Exception as e:
         logger.warning(f"⚠️ SQL执行失败: {str(e)}")
         return 0
@@ -470,6 +709,9 @@ def get_relevant_papers_by_date(date: str) -> List[Dict]:
     """获取指定日期的相关论文"""
     mysql_config = ARXIV_CONFIG.get("mysql", {})
     table = mysql_config.get("table_relevant", "papers_relevant")
+    if _get_db_type() == "sqlite":
+        sql = f"SELECT * FROM `{table}` WHERE date(created_at) = date(?) ORDER BY Stars DESC"
+        return execute_query(sql, (date,))
     sql = f"SELECT * FROM `{table}` WHERE DATE(created_at) = %s ORDER BY Stars DESC"
     return execute_query(sql, (date,))
 
@@ -488,7 +730,7 @@ def get_paper_stats() -> Dict:
         "by_score_range": {},  # 改为分数段统计
     }
 
-    conn = get_mysql_connection()
+    conn = get_db_connection()
     if not conn:
         return stats
 
@@ -501,14 +743,24 @@ def get_paper_stats() -> Dict:
         stats["total_relevant"] = result[0]["cnt"] if result else 0
 
         # 今日
-        result = execute_query(
-            f"SELECT COUNT(*) as cnt FROM `{table_raw}` WHERE DATE(created_at) = CURDATE()"
-        )
+        if _get_db_type() == "sqlite":
+            result = execute_query(
+                f"SELECT COUNT(*) as cnt FROM `{table_raw}` WHERE date(created_at) = date('now')"
+            )
+        else:
+            result = execute_query(
+                f"SELECT COUNT(*) as cnt FROM `{table_raw}` WHERE DATE(created_at) = CURDATE()"
+            )
         stats["today_raw"] = result[0]["cnt"] if result else 0
 
-        result = execute_query(
-            f"SELECT COUNT(*) as cnt FROM `{table_relevant}` WHERE DATE(created_at) = CURDATE()"
-        )
+        if _get_db_type() == "sqlite":
+            result = execute_query(
+                f"SELECT COUNT(*) as cnt FROM `{table_relevant}` WHERE date(created_at) = date('now')"
+            )
+        else:
+            result = execute_query(
+                f"SELECT COUNT(*) as cnt FROM `{table_relevant}` WHERE DATE(created_at) = CURDATE()"
+            )
         stats["today_relevant"] = result[0]["cnt"] if result else 0
 
         # 按分数段统计（100分制）
@@ -543,10 +795,6 @@ def is_paper_processed(doi: str, table: str = "papers_relevant") -> bool:
     if not doi:
         return False
 
-    conn = get_mysql_connection()
-    if not conn:
-        return False
-
     try:
         sql = f"SELECT 1 FROM `{table}` WHERE DOI = %s LIMIT 1"
         results = execute_query(sql, (doi,))
@@ -558,10 +806,6 @@ def is_paper_processed(doi: str, table: str = "papers_relevant") -> bool:
 
 def get_processed_dois(table: str = "papers_relevant") -> set:
     """获取已处理过的论文DOI集合"""
-    conn = get_mysql_connection()
-    if not conn:
-        return set()
-
     try:
         sql = f"SELECT DOI FROM `{table}`"
         results = execute_query(sql)
@@ -618,38 +862,21 @@ def mark_papers_as_processed(dois: List[str]) -> int:
     mysql_config = ARXIV_CONFIG.get("mysql", {})
     table = mysql_config.get("table_raw", "papers_raw")
 
-    conn = get_mysql_connection()
-    if not conn:
-        return 0
-
-    try:
-        with conn.cursor() as cursor:
-            placeholders = ",".join(["%s"] * len(dois))
-            sql = f"UPDATE `{table}` SET processed = TRUE WHERE DOI IN ({placeholders})"
-            cursor.execute(sql, tuple(dois))
-        conn.commit()
-        return cursor.rowcount
-    except Exception as e:
-        logger.error(f"标记论文为已处理失败: {str(e)}")
-        return 0
+    placeholders = ",".join([_get_placeholder()] * len(dois))
+    sql = f"UPDATE `{table}` SET processed = TRUE WHERE DOI IN ({placeholders})"
+    return execute_update(sql, tuple(dois))
 
 
 def load_config_from_db(config_name: str) -> Optional[Dict]:
     """从数据库加载配置"""
-    conn = get_mysql_connection()
-    if not conn:
-        return None
-
     try:
-        with conn.cursor() as cursor:
-            sql = "SELECT config_value FROM system_config WHERE config_name = %s"
-            cursor.execute(sql, (config_name,))
-            result = cursor.fetchone()
-            if result:
-                import json
+        sql = "SELECT config_value FROM system_config WHERE config_name = %s"
+        result = execute_query(sql, (config_name,))
+        if result:
+            import json
 
-                return json.loads(result["config_value"])
-            return None
+            return json.loads(result[0]["config_value"])
+        return None
     except Exception as e:
         logger.error(f"从数据库加载配置失败: {str(e)}")
         return None
@@ -657,24 +884,27 @@ def load_config_from_db(config_name: str) -> Optional[Dict]:
 
 def save_config_to_db(config_name: str, config_value: Dict) -> bool:
     """保存配置到数据库"""
-    conn = get_mysql_connection()
-    if not conn:
-        return False
-
     try:
         import json
 
-        with conn.cursor() as cursor:
+        db_type = _get_db_type()
+        value = json.dumps(config_value, ensure_ascii=False)
+        if db_type == "sqlite":
             sql = """
-            INSERT INTO system_config (config_name, config_value) 
-            VALUES (%s, %s)
-            ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = CURRENT_TIMESTAMP
+            INSERT INTO system_config (config_name, config_value, updated_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT(config_name) DO UPDATE SET
+                config_value = excluded.config_value,
+                updated_at = CURRENT_TIMESTAMP
             """
-            cursor.execute(
-                sql, (config_name, json.dumps(config_value, ensure_ascii=False))
-            )
-        conn.commit()
-        return True
+            return execute_update(sql, (config_name, value)) > 0
+
+        sql = """
+        INSERT INTO system_config (config_name, config_value) 
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = CURRENT_TIMESTAMP
+        """
+        return execute_update(sql, (config_name, value)) > 0
     except Exception as e:
         logger.error(f"保存配置到数据库失败: {str(e)}")
         return False
@@ -682,24 +912,17 @@ def save_config_to_db(config_name: str, config_value: Dict) -> bool:
 
 def get_all_configs_from_db() -> Dict[str, Dict]:
     """获取所有配置"""
-    conn = get_mysql_connection()
-    if not conn:
-        return {}
-
     try:
-        with conn.cursor() as cursor:
-            sql = "SELECT config_name, config_value FROM system_config"
-            cursor.execute(sql)
-            results = cursor.fetchall()
-            import json
+        results = execute_query("SELECT config_name, config_value FROM system_config")
+        import json
 
-            configs = {}
-            for row in results:
-                try:
-                    configs[row["config_name"]] = json.loads(row["config_value"])
-                except:
-                    pass
-            return configs
+        configs = {}
+        for row in results:
+            try:
+                configs[row["config_name"]] = json.loads(row["config_value"])
+            except Exception:
+                pass
+        return configs
     except Exception as e:
         logger.error(f"获取所有配置失败: {str(e)}")
         return {}
@@ -707,13 +930,16 @@ def get_all_configs_from_db() -> Dict[str, Dict]:
 
 def enqueue_papers_to_db(papers: List[Dict[str, Any]]) -> int:
     """将论文加入推送队列（数据库）"""
-    conn = get_mysql_connection()
+    conn = get_db_connection()
     if not conn or not papers:
         return 0
 
+    db_type = _get_db_type()
+
     try:
         added_count = 0
-        with conn.cursor() as cursor:
+        if db_type == "sqlite":
+            cursor = conn.cursor()
             for paper in papers:
                 sql = """
                 INSERT INTO paper_queue 
@@ -723,9 +949,16 @@ def enqueue_papers_to_db(papers: List[Dict[str, Any]]) -> int:
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE DOI=DOI
                 """
+                if db_type == "sqlite":
+                    sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO")
+                    sql = sql.replace("ON DUPLICATE KEY UPDATE DOI=DOI", "")
+                    sql = sql.replace(
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    )
                 try:
                     cursor.execute(
-                        sql,
+                        _normalize_sql(sql),
                         (
                             paper.get("DOI", ""),
                             paper.get("Title", ""),
@@ -749,6 +982,47 @@ def enqueue_papers_to_db(papers: List[Dict[str, Any]]) -> int:
                 except Exception as e:
                     logger.warning(f"添加论文到队列失败 {paper.get('DOI')}: {str(e)}")
                     continue
+        else:
+            with conn.cursor() as cursor:
+                for paper in papers:
+                    sql = """
+                    INSERT INTO paper_queue 
+                    (DOI, Title, TitleCN, Author, Affiliation, PublicationYear, 
+                     Abstract, AbstractCN, Link, PDFLink, Source, SubjectTerms, 
+                     Stars, RelevanceReason, PotentialHelp)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE DOI=DOI
+                    """
+                    try:
+                        cursor.execute(
+                            _normalize_sql(sql),
+                            (
+                                paper.get("DOI", ""),
+                                paper.get("Title", ""),
+                                paper.get("TitleCN", ""),
+                                paper.get("Author", ""),
+                                paper.get("Affiliation", ""),
+                                _normalize_publication_year(
+                                    paper.get("PublicationYear")
+                                ),
+                                paper.get("Abstract", ""),
+                                paper.get("AbstractCN", ""),
+                                paper.get("Link", ""),
+                                paper.get("PDFLink", ""),
+                                paper.get("Source", ""),
+                                paper.get("SubjectTerms", ""),
+                                paper.get("Stars", 0),
+                                paper.get("RelevanceReason", ""),
+                                paper.get("PotentialHelp", ""),
+                            ),
+                        )
+                        if cursor.rowcount > 0:
+                            added_count += 1
+                    except Exception as e:
+                        logger.warning(
+                            f"添加论文到队列失败 {paper.get('DOI')}: {str(e)}"
+                        )
+                        continue
 
         conn.commit()
         logger.info(f"✅ 已将 {added_count} 篇新论文加入推送队列")
@@ -760,122 +1034,67 @@ def enqueue_papers_to_db(papers: List[Dict[str, Any]]) -> int:
 
 def dequeue_papers_from_db(max_count: int) -> List[Dict[str, Any]]:
     """从队列中取出论文（自定义策略：>80分全推，否则凑齐max_count，优先当天）"""
-    conn = get_mysql_connection()
-    if not conn:
-        return []
-
     try:
-        with conn.cursor() as cursor:
-            # 1. 获取队列中所有论文（限制100篇，避免内存过大）
-            sql = (
-                "SELECT * FROM paper_queue ORDER BY Stars DESC, added_at DESC LIMIT 100"
+        sql = "SELECT * FROM paper_queue ORDER BY Stars DESC, added_at DESC LIMIT 100"
+        all_papers = execute_query(sql)
+
+        if not all_papers:
+            return []
+
+        high_score_papers = []
+        normal_papers = []
+        today = date.today()
+
+        for paper in all_papers:
+            stars = paper.get("Stars", 0)
+            is_today = False
+            added_at = paper.get("added_at")
+            if added_at:
+                if isinstance(added_at, str):
+                    try:
+                        dt_str = str(added_at)[:10]
+                        added_at_date = datetime.strptime(dt_str, "%Y-%m-%d").date()
+                        is_today = added_at_date == today
+                    except Exception:
+                        pass
+                elif hasattr(added_at, "date"):
+                    is_today = added_at.date() == today
+
+            paper["_is_today"] = is_today
+            if stars > 80:
+                high_score_papers.append(paper)
+            else:
+                normal_papers.append(paper)
+
+        selected_papers = high_score_papers[:]
+        if len(selected_papers) < max_count:
+            needed = max_count - len(selected_papers)
+            normal_papers.sort(
+                key=lambda x: (
+                    1 if x.get("_is_today") else 0,
+                    x.get("Stars", 0),
+                    x.get("added_at") if x.get("added_at") else datetime.min,
+                ),
+                reverse=True,
             )
-            cursor.execute(sql)
-            all_papers = cursor.fetchall()
+            selected_papers.extend(normal_papers[:needed])
 
-            if not all_papers:
-                return []
+        if selected_papers:
+            dois = [p["DOI"] for p in selected_papers if p.get("DOI")]
+            if dois:
+                placeholders = ",".join([_get_placeholder()] * len(dois))
+                delete_sql = f"DELETE FROM paper_queue WHERE DOI IN ({placeholders})"
+                execute_update(delete_sql, tuple(dois))
 
-            # 2. 分类筛选
-            high_score_papers = []
-            normal_papers = []
+            logger.info(
+                f"✅ 从队列中取出 {len(selected_papers)} 篇论文 (高分>80: {len(high_score_papers)}, 补足: {len(selected_papers) - len(high_score_papers)})"
+            )
 
-            today = date.today()
+            for p in selected_papers:
+                p.pop("_is_today", None)
 
-            for paper in all_papers:
-                stars = paper.get("Stars", 0)
+        return selected_papers
 
-                # 检查是否是当天的 (added_at)
-                is_today = False
-                added_at = paper.get("added_at")
-                if added_at:
-                    if isinstance(added_at, str):
-                        try:
-                            dt_str = str(added_at)[:10]
-                            added_at_date = datetime.strptime(dt_str, "%Y-%m-%d").date()
-                            is_today = added_at_date == today
-                        except:
-                            pass
-                    elif hasattr(added_at, "date"):
-                        is_today = added_at.date() == today
-
-                paper["_is_today"] = is_today
-
-                # 逻辑：大于80分都推送
-                if stars > 80:
-                    high_score_papers.append(paper)
-                else:
-                    normal_papers.append(paper)
-
-            # 3. 构建结果集
-            selected_papers = high_score_papers[:]
-
-            # 规则：如果不足 max_count，从剩余中补足
-            if len(selected_papers) < max_count:
-                needed = max_count - len(selected_papers)
-
-                # 排序规则：当天 > 分数高 > 时间新
-                normal_papers.sort(
-                    key=lambda x: (
-                        1 if x.get("_is_today") else 0,
-                        x.get("Stars", 0),
-                        x.get("added_at") if x.get("added_at") else datetime.min,
-                    ),
-                    reverse=True,
-                )
-
-                selected_papers.extend(normal_papers[:needed])
-
-            # 4. 从数据库删除选中的论文
-            if selected_papers:
-                dois = [p["DOI"] for p in selected_papers if p.get("DOI")]
-                if dois:
-                    placeholders = ",".join(["%s"] * len(dois))
-                    delete_sql = (
-                        f"DELETE FROM paper_queue WHERE DOI IN ({placeholders})"
-                    )
-                    cursor.execute(delete_sql, tuple(dois))
-
-                conn.commit()
-                logger.info(
-                    f"✅ 从队列中取出 {len(selected_papers)} 篇论文 (高分>80: {len(high_score_papers)}, 补足: {len(selected_papers) - len(high_score_papers)})"
-                )
-
-                # 清理临时字段
-                for p in selected_papers:
-                    p.pop("_is_today", None)
-
-            return selected_papers
-
-    except Exception as e:
-        logger.error(f"从队列取出论文失败: {str(e)}")
-        return []
-
-    try:
-        with conn.cursor() as cursor:
-            # 按星级降序，再按时间降序排序
-            sql = """
-            SELECT * FROM paper_queue 
-            ORDER BY Stars DESC, added_at DESC 
-            LIMIT %s
-            """
-            cursor.execute(sql, (max_count,))
-            papers = cursor.fetchall()
-
-            if papers:
-                # 删除已取出的论文
-                dois = [p["DOI"] for p in papers if p.get("DOI")]
-                if dois:
-                    placeholders = ",".join(["%s"] * len(dois))
-                    delete_sql = (
-                        f"DELETE FROM paper_queue WHERE DOI IN ({placeholders})"
-                    )
-                    cursor.execute(delete_sql, tuple(dois))
-
-                conn.commit()
-                logger.info(f"✅ 从队列中取出 {len(papers)} 篇论文")
-
-            return papers
     except Exception as e:
         logger.error(f"从队列取出论文失败: {str(e)}")
         return []
@@ -883,16 +1102,9 @@ def dequeue_papers_from_db(max_count: int) -> List[Dict[str, Any]]:
 
 def get_queue_size_from_db() -> int:
     """获取队列中的论文数量"""
-    conn = get_mysql_connection()
-    if not conn:
-        return 0
-
     try:
-        with conn.cursor() as cursor:
-            sql = "SELECT COUNT(*) as count FROM paper_queue"
-            cursor.execute(sql)
-            result = cursor.fetchone()
-            return result["count"] if result else 0
+        result = execute_query("SELECT COUNT(*) as count FROM paper_queue")
+        return result[0]["count"] if result else 0
     except Exception as e:
         logger.error(f"获取队列大小失败: {str(e)}")
         return 0
@@ -900,19 +1112,13 @@ def get_queue_size_from_db() -> int:
 
 def get_queue_preview_from_db(max_count: int = 10) -> List[Dict[str, Any]]:
     """获取队列预览（不删除）"""
-    conn = get_mysql_connection()
-    if not conn:
-        return []
-
     try:
-        with conn.cursor() as cursor:
-            sql = """
-            SELECT * FROM paper_queue 
-            ORDER BY Stars DESC, added_at DESC 
-            LIMIT %s
-            """
-            cursor.execute(sql, (max_count,))
-            return cursor.fetchall()
+        sql = """
+        SELECT * FROM paper_queue 
+        ORDER BY Stars DESC, added_at DESC 
+        LIMIT %s
+        """
+        return execute_query(sql, (max_count,))
     except Exception as e:
         logger.error(f"获取队列预览失败: {str(e)}")
         return []
@@ -920,14 +1126,8 @@ def get_queue_preview_from_db(max_count: int = 10) -> List[Dict[str, Any]]:
 
 def clear_queue_in_db() -> bool:
     """清空推送队列"""
-    conn = get_mysql_connection()
-    if not conn:
-        return False
-
     try:
-        with conn.cursor() as cursor:
-            cursor.execute("DELETE FROM paper_queue")
-        conn.commit()
+        execute_update("DELETE FROM paper_queue")
         logger.info("✅ 推送队列已清空")
         return True
     except Exception as e:
@@ -940,22 +1140,16 @@ def get_unpushed_papers(limit: int = 100) -> List[Dict[str, Any]]:
     mysql_config = ARXIV_CONFIG.get("mysql", {})
     table = mysql_config.get("table_relevant", "papers_relevant")
 
-    conn = get_mysql_connection()
-    if not conn:
-        return []
-
     try:
-        with conn.cursor() as cursor:
-            sql = f"""
-            SELECT * FROM `{table}` 
-            WHERE is_pushed = FALSE 
-            ORDER BY Stars DESC, created_at DESC 
-            LIMIT %s
-            """
-            cursor.execute(sql, (limit,))
-            papers = cursor.fetchall()
-            logger.info(f"找到 {len(papers)} 篇未推送的论文")
-            return papers
+        sql = f"""
+        SELECT * FROM `{table}` 
+        WHERE is_pushed = FALSE 
+        ORDER BY Stars DESC, created_at DESC 
+        LIMIT %s
+        """
+        papers = execute_query(sql, (limit,))
+        logger.info(f"找到 {len(papers)} 篇未推送的论文")
+        return papers
     except Exception as e:
         logger.error(f"获取未推送论文失败: {str(e)}")
         return []
@@ -969,18 +1163,12 @@ def mark_papers_as_pushed(dois: List[str]) -> int:
     mysql_config = ARXIV_CONFIG.get("mysql", {})
     table = mysql_config.get("table_relevant", "papers_relevant")
 
-    conn = get_mysql_connection()
-    if not conn:
-        return 0
+    placeholders = ",".join([_get_placeholder()] * len(dois))
+    sql = f"UPDATE `{table}` SET is_pushed = TRUE WHERE DOI IN ({placeholders})"
+    row_count = execute_update(sql, tuple(dois))
+    if row_count > 0:
+        logger.info(f"✅ 已标记 {row_count} 篇论文为已推送")
+    return row_count
 
-    try:
-        with conn.cursor() as cursor:
-            placeholders = ",".join(["%s"] * len(dois))
-            sql = f"UPDATE `{table}` SET is_pushed = TRUE WHERE DOI IN ({placeholders})"
-            cursor.execute(sql, tuple(dois))
-        conn.commit()
-        logger.info(f"✅ 已标记 {cursor.rowcount} 篇论文为已推送")
-        return cursor.rowcount
-    except Exception as e:
-        logger.error(f"标记论文为已推送失败: {str(e)}")
-        return 0
+
+get_mysql_connection = get_db_connection

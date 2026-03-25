@@ -989,11 +989,54 @@
                             </div>
                             <div>
                                 <h3 class="text-xl font-bold text-gray-900">数据库配置</h3>
-                                <p class="text-sm text-gray-500">配置 MySQL 数据库连接，用于存储论文数据</p>
+                                <p class="text-sm text-gray-500">选择数据库类型并配置连接信息</p>
                             </div>
                         </div>
 
-                        <div class="space-y-4">
+                        <!-- 数据库类型选择 -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-3">数据库类型</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button @click="wizardData.db.db_type = 'sqlite'; wizardTestResults.db = null;"
+                                    :class="['p-4 border-2 rounded-xl flex items-center gap-3 transition-all',
+                                        wizardData.db.db_type === 'sqlite' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300']">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center"
+                                        :class="wizardData.db.db_type === 'sqlite' ? 'bg-green-100' : 'bg-gray-100'">
+                                        <i class="ph ph-file-sql text-xl" :class="wizardData.db.db_type === 'sqlite' ? 'text-green-600' : 'text-gray-400'"></i>
+                                    </div>
+                                    <div class="text-left">
+                                        <div class="font-medium" :class="wizardData.db.db_type === 'sqlite' ? 'text-green-700' : 'text-gray-700'">SQLite</div>
+                                        <div class="text-xs text-gray-500">轻量级，无需安装</div>
+                                    </div>
+                                </button>
+                                <button @click="wizardData.db.db_type = 'mysql'; wizardTestResults.db = null;"
+                                    :class="['p-4 border-2 rounded-xl flex items-center gap-3 transition-all',
+                                        wizardData.db.db_type === 'mysql' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300']">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center"
+                                        :class="wizardData.db.db_type === 'mysql' ? 'bg-blue-100' : 'bg-gray-100'">
+                                        <i class="ph ph-database text-xl" :class="wizardData.db.db_type === 'mysql' ? 'text-blue-600' : 'text-gray-400'"></i>
+                                    </div>
+                                    <div class="text-left">
+                                        <div class="font-medium" :class="wizardData.db.db_type === 'mysql' ? 'text-blue-700' : 'text-gray-700'">MySQL</div>
+                                        <div class="text-xs text-gray-500">功能完整，适合生产</div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- SQLite 配置（简化） -->
+                        <div v-if="wizardData.db.db_type === 'sqlite'" class="bg-green-50 rounded-lg p-4 mb-6">
+                            <div class="flex items-start gap-3">
+                                <i class="ph ph-check-circle text-green-600 text-lg mt-0.5"></i>
+                                <div>
+                                    <p class="text-sm text-green-800 font-medium">SQLite 模式</p>
+                                    <p class="text-xs text-green-600 mt-1">数据将存储在本地文件 <code class="bg-green-100 px-1 rounded">{{ wizardData.db.sqlite_path || 'data/papers.db' }}</code>，无需额外配置</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- MySQL 配置（原有表单） -->
+                        <div v-if="wizardData.db.db_type === 'mysql'" class="space-y-4">
                             <div class="grid grid-cols-3 gap-4">
                                 <div class="col-span-2">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">主机地址</label>
@@ -1025,8 +1068,8 @@
                             </div>
                         </div>
 
-                        <!-- 测试连接按钮 -->
-                        <div class="mt-6 flex items-center gap-4">
+                        <!-- 测试连接按钮（仅 MySQL 模式显示） -->
+                        <div v-if="wizardData.db.db_type === 'mysql'" class="mt-6 flex items-center gap-4">
                             <button @click="testDBConnection" :disabled="wizardTesting"
                                 class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2">
                                 <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-plugs-connected'" class="text-lg"></i>
@@ -1040,12 +1083,19 @@
                             </div>
                         </div>
 
+                        <!-- SQLite 就绪提示 -->
+                        <div v-if="wizardData.db.db_type === 'sqlite'" class="mt-6 flex items-center gap-2 text-sm text-green-700">
+                            <i class="ph-fill ph-check-circle text-green-500 text-lg"></i>
+                            <span>SQLite 已就绪，无需测试连接</span>
+                        </div>
+
                         <div class="mt-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
                             <div class="flex items-start gap-2">
                                 <i class="ph ph-info text-amber-600 text-lg mt-0.5"></i>
                                 <div class="text-sm text-amber-800">
                                     <p class="font-medium mb-1">提示</p>
-                                    <p>如果暂时没有数据库，可以点击"跳过"继续配置其他项。系统支持无数据库模式运行（部分功能受限）。</p>
+                                    <p v-if="wizardData.db.db_type === 'sqlite'">SQLite 适合个人使用和小规模部署，数据存储在本地文件中，开箱即用。</p>
+                                    <p v-else>如果暂时没有数据库，可以点击"跳过"继续配置其他项，或切换到 SQLite 模式。</p>
                                 </div>
                             </div>
                         </div>
@@ -1290,11 +1340,14 @@
                                     <h4 class="font-medium text-gray-800 flex items-center gap-2">
                                         <i class="ph ph-database text-blue-600"></i> 数据库
                                     </h4>
-                                    <span v-if="wizardTestResults.db && wizardTestResults.db.success" class="text-xs text-green-600 flex items-center gap-1">
-                                        <i class="ph-fill ph-check-circle"></i> 已验证
+                                    <span v-if="wizardData.db.db_type === 'sqlite' || (wizardTestResults.db && wizardTestResults.db.success)" class="text-xs text-green-600 flex items-center gap-1">
+                                        <i class="ph-fill ph-check-circle"></i> {{ wizardData.db.db_type === 'sqlite' ? '已就绪' : '已验证' }}
                                     </span>
                                 </div>
-                                <p class="text-sm text-gray-600" v-if="wizardData.db.host">
+                                <p class="text-sm text-gray-600" v-if="wizardData.db.db_type === 'sqlite'">
+                                    SQLite 模式 - {{ wizardData.db.sqlite_path || 'data/papers.db' }}
+                                </p>
+                                <p class="text-sm text-gray-600" v-else-if="wizardData.db.host">
                                     {{ wizardData.db.host }}:{{ wizardData.db.port }} / {{ wizardData.db.database }}（{{ wizardData.db.user }}）
                                 </p>
                                 <p class="text-sm text-gray-400" v-else>未配置</p>
@@ -1471,7 +1524,7 @@
                 const existingConfig = ref(null);  // 已有配置检测结果
                 const configCheckDone = ref(false); // 配置检测是否完成
                 const wizardData = ref({
-                    db: { host: '', port: 3306, user: '', password: '', database: '' },
+                    db: { db_type: 'sqlite', host: '', port: 3306, user: '', password: '', database: '', sqlite_path: 'data/papers.db' },
                     research: '',
                     llm: { api_key: '', base_url: '', model: '' },
                     arxiv: { keywords: ['cs.CL', 'cs.CV', 'cs.LG', 'cs.AI'], max_results_per_keyword: 100 },
@@ -1566,11 +1619,13 @@
                             configCheckDone.value = true;
                             if (data.data.mysql) {
                                 wizardData.value.db = {
+                                    db_type: data.data.mysql.db_type || 'mysql',
                                     host: data.data.mysql.host || '',
                                     port: data.data.mysql.port || 3306,
                                     user: data.data.mysql.user || '',
                                     password: '',
-                                    database: data.data.mysql.database || ''
+                                    database: data.data.mysql.database || '',
+                                    sqlite_path: data.data.mysql.sqlite_path || 'data/papers.db'
                                 };
                             }
                             if (data.data.research_description) {
@@ -1598,7 +1653,7 @@
                 // 重置向导数据为默认值
                 const resetWizardData = () => {
                     wizardData.value = {
-                        db: { host: '', port: 3306, user: '', password: '', database: '' },
+                        db: { db_type: 'sqlite', host: '', port: 3306, user: '', password: '', database: '', sqlite_path: 'data/papers.db' },
                         research: '',
                         llm: { api_key: '', base_url: '', model: '' },
                         arxiv: { keywords: ['cs.CL', 'cs.CV', 'cs.LG', 'cs.AI'], max_results_per_keyword: 100 },
@@ -1649,11 +1704,23 @@
                     try {
                         const step = wizardStep.value;
                         if (step === 2) {
-                            // 保存数据库配置
+                            const dbConfig = {
+                                enable: true,
+                                db_type: wizardData.value.db.db_type || 'sqlite',
+                            };
+                            if (wizardData.value.db.db_type === 'mysql') {
+                                dbConfig.host = wizardData.value.db.host;
+                                dbConfig.port = wizardData.value.db.port;
+                                dbConfig.user = wizardData.value.db.user;
+                                dbConfig.password = wizardData.value.db.password;
+                                dbConfig.database = wizardData.value.db.database;
+                            } else {
+                                dbConfig.sqlite_path = wizardData.value.db.sqlite_path || 'data/papers.db';
+                            }
                             await fetch('/api/config/mysql', {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ config: wizardData.value.db })
+                                body: JSON.stringify({ config: dbConfig })
                             });
                         } else if (step === 3) {
                             await fetch('/api/config/llm_filter', {
@@ -1935,11 +2002,13 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`;
                             // 填充数据库配置
                             if (config.mysql) {
                                 wizardData.value.db = {
+                                    db_type: config.mysql.db_type || 'mysql',
                                     host: config.mysql.host || '',
                                     port: config.mysql.port || 3306,
                                     user: config.mysql.user || '',
                                     password: config.mysql.password || '',
-                                    database: config.mysql.database || ''
+                                    database: config.mysql.database || '',
+                                    sqlite_path: config.mysql.sqlite_path || 'data/papers.db'
                                 };
                             }
                             // 填充研究方向
