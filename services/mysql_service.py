@@ -91,7 +91,6 @@ def _get_sqlite_connection(db_config: Dict):
         conn.row_factory = sqlite3.Row
         _thread_local.sqlite_connection = conn
         _ensure_sqlite_tables_exist(conn, db_config)
-        logger.info(f"✅ SQLite连接成功: {db_path}")
         return conn
     except Exception as e:
         logger.warning(f"⚠️ SQLite连接失败: {str(e)}")
@@ -119,8 +118,6 @@ def _get_mysql_connection(db_config: Dict):
             charset=db_config.get("charset", "utf8mb4"),
             cursorclass=pymysql.cursors.DictCursor,
         )
-        thread_id = threading.current_thread().name
-        logger.info(f"✅ MySQL连接成功 (线程: {thread_id})")
         _ensure_tables_exist(_thread_local.connection, db_config)
         return _thread_local.connection
     except ImportError:
