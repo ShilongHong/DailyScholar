@@ -1,7 +1,7 @@
-# ArXiv 论文推送系统 - AI Coding 指南
+# DailyScholar - AI Coding 指南
 
 ## 项目概述
-这是一个 **三合一** 学术论文推送系统：FastAPI 后端 + 定时调度器 + 静态前端服务，运行端口 `20001`。
+DailyScholar 是一个 **三合一** 学术论文推送系统：FastAPI 后端 + 定时调度器 + 静态前端服务，运行端口 `20001`。
 
 ## 核心架构
 
@@ -36,9 +36,10 @@ python app.py  # 访问 http://localhost:20001/docs
 ```
 
 ### 配置修改
-- **研究方向**: 修改 `config.py` 中的 `RESEARCH_DESCRIPTION`
-- **arXiv 分类**: 修改 `ARXIV_CONFIG['keywords']`，支持 `cs.CL`、`cs.CV` 等分类代码
-- **LLM 筛选阈值**: `LLM_FILTER_CONFIG['min_score']` (100分制，默认60分及格)
+- **推荐流程**: 首次运行后优先通过 Web 初始化向导和 `/api/config/*` 完成与更新配置
+- **研究方向**: 优先通过配置页面或 `/api/config/research_description` 更新；`config.py` 仅作为默认回退值
+- **arXiv 分类**: 优先通过配置页面或 `/api/config/arxiv_config` 更新关键词（如 `cs.CL`、`cs.CV`）
+- **LLM 筛选阈值**: 优先通过 `/api/config/llm_filter_config` 调整 `min_score`（100分制，默认60分及格）
 
 ### API 路由约定
 - 所有 API 路径以 `/api/` 开头

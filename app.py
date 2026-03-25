@@ -1,5 +1,5 @@
 """
-ArXiv论文推送系统 v3.0 - 三合一版
+DailyScholar v3.0 - AI科研情报助手
 后端API + 定时调度 + 静态页面服务
 """
 
@@ -552,7 +552,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ArXiv论文推送系统",
+    title="DailyScholar - AI科研情报助手",
     description="三合一版本：API + 调度器 + 前端",
     version="3.0.0",
     lifespan=lifespan,
@@ -1344,6 +1344,7 @@ async def reset_setup():
 async def get_all_config():
     """获取所有配置"""
     from config import RESEARCH_DESCRIPTION
+    from services.prompt_service import DEFAULT_PROMPT_CONFIG
 
     # 从数据库加载研究方向（如果有）
     runtime = cast(dict[str, object], load_runtime_config() or {})
@@ -1356,6 +1357,16 @@ async def get_all_config():
     llm_config = mask_sensitive_fields(llm_raw)
     notify_config = mask_sensitive_fields(notify_raw)
 
+    # 加载 prompt_config
+    try:
+        from services.mysql_service import load_config_from_db
+
+        prompt_config = load_config_from_db("prompt_config") or {}
+        # 合并默认值和数据库值
+        full_prompt_config = {**DEFAULT_PROMPT_CONFIG, **prompt_config}
+    except Exception:
+        full_prompt_config = DEFAULT_PROMPT_CONFIG
+
     return {
         "success": True,
         "data": {
@@ -1364,6 +1375,7 @@ async def get_all_config():
             "schedule": get_config("schedule"),
             "notify": notify_config,
             "research_description": research_description,
+            "prompt_config": full_prompt_config,
             "dingtalk": {
                 "app_key": DINGTALK_CONFIG.get("app_key", ""),
                 "robot_code": DINGTALK_CONFIG.get("robot_code", ""),
@@ -1733,7 +1745,7 @@ async def serve_index():
     else:
         return JSONResponse(
             {
-                "message": "欢迎使用ArXiv论文推送系统 v3.0",
+                "message": "欢迎使用DailyScholar v3.0!\n\n系统已准备就绪，请在系统配置中设置您的研究方向描述，以获取最精准的论文推送。",
                 "docs": "/docs",
                 "api": "/api/health",
                 "note": "请将前端构建文件放到 static/ 目录",
@@ -1763,7 +1775,7 @@ async def serve_static(path: str):
 if __name__ == "__main__":
     print("""
 ╔══════════════════════════════════════════════════════════╗
-║         ArXiv论文推送系统 v3.0 - 三合一版                ║
+        ║         DailyScholar v3.0 - 您的AI科研情报助手           ║
 ║                                                          ║
 ║  功能：后端API + 定时调度 + 前端页面服务                 ║
 ║  端口：20001                                             ║
