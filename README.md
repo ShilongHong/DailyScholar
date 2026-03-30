@@ -184,9 +184,15 @@ dailyscholar/
 └── tools/
 ```
 
-## 一句话总结
+## Star History
 
-DailyScholar 不是单纯的论文抓取器，它更像一个面向个人研究习惯的情报工作台，能把抓取、筛选、翻译、排队、推送和配置管理放到同一个地方。
+<a href="https://www.star-history.com/?repos=JCodesMore%2Fai-website-cloner-template&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=JCodesMore/ai-website-cloner-template&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=JCodesMore/ai-website-cloner-template&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=JCodesMore/ai-website-cloner-template&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
