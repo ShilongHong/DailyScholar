@@ -220,6 +220,95 @@ def _ensure_sqlite_tables_exist(conn, db_config: Dict):
         """
     )
 
+    # PDF 阅读器相关字段（SQLite 列迁移）
+    existing_columns = {
+        row[1] for row in cursor.execute(f"PRAGMA table_info({table_relevant})").fetchall()
+    }
+    if "pdf_cached" not in existing_columns:
+        cursor.execute(f"ALTER TABLE {table_relevant} ADD COLUMN pdf_cached INTEGER DEFAULT 0")
+    if "markdown_content" not in existing_columns:
+        cursor.execute(f"ALTER TABLE {table_relevant} ADD COLUMN markdown_content TEXT")
+    if "markdown_images" not in existing_columns:
+        cursor.execute(f"ALTER TABLE {table_relevant} ADD COLUMN markdown_images TEXT")
+    if "full_translation" not in existing_columns:
+        cursor.execute(f"ALTER TABLE {table_relevant} ADD COLUMN full_translation TEXT")
+
+    # 标注表（SQLite）
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS paper_annotations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doi TEXT NOT NULL,
+            page INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            position TEXT NOT NULL,
+            content TEXT,
+            color TEXT DEFAULT '#FFFF00',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_annotations_doi ON paper_annotations (doi)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_annotations_page ON paper_annotations (doi, page)"
+    )
+
+    # 对话会话表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_chat_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doi TEXT NOT NULL,
+            title TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chat_sessions_doi ON paper_chat_sessions (doi)"
+    )
+
+    # 对话消息表
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS paper_chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (session_id) REFERENCES paper_chat_sessions(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON paper_chat_messages (session_id)"
+    )
+
+    # 翻译分块缓存表（持久化）
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS translation_chunk_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doi TEXT NOT NULL,
+            cache_key TEXT NOT NULL,
+            source_lang TEXT NOT NULL,
+            target_lang TEXT NOT NULL,
+            model TEXT,
+            chunk_hash TEXT NOT NULL,
+            translated_text TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_translation_cache_doi_key ON translation_chunk_cache (doi, cache_key)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_translation_cache_doi ON translation_chunk_cache (doi)"
+    )
+
     conn.commit()
 
 
@@ -389,9 +478,86 @@ def _ensure_tables_exist(conn, mysql_config: Dict):
             """
             cursor.execute(create_queue_sql)
 
+            # PDF 阅读器相关字段
+            cursor.execute(f"SHOW COLUMNS FROM `{table_relevant}` LIKE 'pdf_cached'")
+            if not cursor.fetchone():
+                cursor.execute(f"ALTER TABLE `{table_relevant}` ADD COLUMN `pdf_cached` BOOLEAN DEFAULT FALSE")
+
+            cursor.execute(f"SHOW COLUMNS FROM `{table_relevant}` LIKE 'markdown_content'")
+            if not cursor.fetchone():
+                cursor.execute(f"ALTER TABLE `{table_relevant}` ADD COLUMN `markdown_content` LONGTEXT")
+
+            cursor.execute(f"SHOW COLUMNS FROM `{table_relevant}` LIKE 'markdown_images'")
+            if not cursor.fetchone():
+                cursor.execute(f"ALTER TABLE `{table_relevant}` ADD COLUMN `markdown_images` JSON")
+
+            cursor.execute(f"SHOW COLUMNS FROM `{table_relevant}` LIKE 'full_translation'")
+            if not cursor.fetchone():
+                cursor.execute(f"ALTER TABLE `{table_relevant}` ADD COLUMN `full_translation` LONGTEXT")
+
+            # 标注表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `paper_annotations` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `doi` VARCHAR(255) NOT NULL,
+                    `page` INT NOT NULL,
+                    `type` VARCHAR(50) NOT NULL COMMENT 'highlight 或 note',
+                    `position` JSON NOT NULL COMMENT 'x, y, width, height',
+                    `content` TEXT,
+                    `color` VARCHAR(20) DEFAULT '#FFFF00',
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX `idx_doi` (`doi`),
+                    INDEX `idx_page` (`doi`, `page`)
+                )
+            """)
+
+            # 对话会话表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `paper_chat_sessions` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `doi` VARCHAR(255) NOT NULL,
+                    `title` TEXT,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX `idx_chat_sessions_doi` (`doi`)
+                )
+            """)
+
+            # 对话消息表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `paper_chat_messages` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `session_id` INT NOT NULL,
+                    `role` VARCHAR(20) NOT NULL,
+                    `content` LONGTEXT NOT NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_chat_messages_session` (`session_id`),
+                    FOREIGN KEY (`session_id`) REFERENCES `paper_chat_sessions`(`id`) ON DELETE CASCADE
+                )
+            """)
+
+            # 翻译分块缓存表（持久化）
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS `translation_chunk_cache` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `doi` VARCHAR(255) NOT NULL,
+                    `cache_key` VARCHAR(255) NOT NULL,
+                    `source_lang` VARCHAR(20) NOT NULL,
+                    `target_lang` VARCHAR(20) NOT NULL,
+                    `model` VARCHAR(128),
+                    `chunk_hash` VARCHAR(64) NOT NULL,
+                    `translated_text` LONGTEXT NOT NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY `uk_doi_cache_key` (`doi`, `cache_key`),
+                    INDEX `idx_translation_cache_doi` (`doi`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """)
+
         conn.commit()
         logger.info(
-            f"✅ 数据表已确认: {table_raw}, {table_relevant}, system_config, paper_queue"
+            f"✅ 数据表已确认: {table_raw}, {table_relevant}, system_config, paper_queue, paper_annotations, paper_chat_sessions, paper_chat_messages, translation_chunk_cache"
         )
         return True
     except Exception as e:

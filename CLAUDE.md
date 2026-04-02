@@ -4,182 +4,154 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is **DailyScholar v3.0** (formerly ArXiv Paper Push System) - a three-in-one academic paper recommendation system that combines FastAPI backend, built-in scheduler, and static frontend server. It automatically fetches papers from arXiv, uses LLM to filter relevant papers, translates them to Chinese, and pushes notifications to DingTalk.
+**DailyScholar v3.0** - a single-process Python app combining FastAPI backend, built-in scheduler, and Vue 3 SPA frontend. It fetches papers from arXiv, uses LLM to score relevance, translates to Chinese, and pushes notifications via a multi-channel notification system.
 
-**Port**: 20001
-**Main Entry**: [app.py](app.py)
-**API Docs**: http://localhost:20001/docs (Swagger UI)
+**Port**: 20001 | **Main Entry**: [app.py](app.py) | **API Docs**: http://localhost:20001/docs
 
 ## Development Commands
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Run the application (starts API + scheduler + frontend)
-python app.py
-
-# Access points
-# - Frontend: http://localhost:20001
-# - API docs: http://localhost:20001/docs
-# - Health check: http://localhost:20001/api/health
+python app.py                      # Starts API + scheduler + frontend
+pytest tests                       # Run all tests
+pytest tests/test_setup_api.py -k test_db_connection_success  # Single test
 ```
 
-### Testing
-No automated tests currently exist. For manual verification, use API endpoints:
-```bash
-# Test fetching papers
-curl -X POST http://localhost:20001/api/actions/fetch-now
-
-# Test pushing papers
-curl -X POST http://localhost:20001/api/actions/push-now
-```
-
-If adding tests, install pytest and create tests in `test/`:
-```bash
-pip install pytest
-pytest test/
-```
+No formal lint/type-check config exists. Ruff has been used locally before (`.ruff_cache/` exists) but no config file is checked in.
 
 ## Architecture
 
 ### Data Flow Pipeline
 ```
-arXiv API → papers_raw (MySQL) → LLM Filter → Translation → papers_relevant → paper_queue → DingTalk Push
+arXiv API → papers_raw (DB) → LLM Filter (100pt scoring) → Translation → papers_relevant → paper_queue → Notification Push
 ```
+
+### Backend Structure
+- **All routes live in `app.py`** — there are no separate router modules
+- Routes use Pydantic `BaseModel` request bodies
+- Standard response shape: `{"success": bool, "data": ..., "message": ...}`
 
 ### Service Modules (`services/`)
 
-| Service | Purpose | Key Notes |
-|---------|---------|-----------|
-| [arxiv_service.py](services/arxiv_service.py) | Fetch papers from arXiv API | Supports category codes (cs.CL, cs.CV) and keywords |
-| [llm_filter_service.py](services/llm_filter_service.py) | AI-powered relevance scoring | Uses DeepSeek-V3.2, 100-point scale (60+ passes) |
-| [translation_service.py](services/translation_service.py) | Chinese/English translation | Translates titles and abstracts |
-| [mysql_service.py](services/mysql_service.py) | Database operations | Thread-safe connections via `threading.local()`, auto-migration |
-| [dingtalk_http_service.py](services/dingtalk_http_service.py) | DingTalk notifications | **Preferred over SDK version** |
-| [dingtalk_service.py](services/dingtalk_service.py) | DingTalk SDK version | Legacy, prefer HTTP version |
-| [paper_queue_service.py](services/paper_queue_service.py) | Push queue management | Prevents duplicate notifications |
+| Service | Purpose |
+|---------|---------|
+| [arxiv_service.py](services/arxiv_service.py) | Fetch papers from arXiv API (category codes + keywords) |
+| [llm_filter_service.py](services/llm_filter_service.py) | AI relevance scoring via OpenAI-compatible API, 100-point scale |
+| [translation_service.py](services/translation_service.py) | Chinese/English translation of titles and abstracts |
+| [mysql_service.py](services/mysql_service.py) | Thread-safe DB ops (`threading.local()`), auto-migration, supports **both MySQL and SQLite** |
+| [prompt_service.py](services/prompt_service.py) | Centralized prompt template management with DB override |
+| [notify_service.py](services/notify_service.py) | **Unified notification dispatch** — single-channel model with DB-configured routing |
+| [notify.py](services/notify.py) | Low-level push channel implementations (forked from qinglong) |
+| [paper_queue_service.py](services/paper_queue_service.py) | Push queue management, prevents duplicate notifications |
+
+### Multi-Channel Notification Architecture
+
+`NotifyService` is the single notification entry point. It uses a **channel registry pattern**:
+
+1. `NotifyService` reads config from DB (`notify` key), identifies the `active_channel`
+2. `dispatch_single_channel()` routes to the correct sender based on channel `send_mode`:
+   - **`adapter`** channels (e.g., `dingtalk_app`) instantiate a service class directly
+   - **`direct`** channels (e.g., `console`, `bark`, `telegram`) call functions in `notify.py` via `NOTIFY_CHANNEL_FUNCTIONS` mapping
+3. Supported channels: `console`, `bark`, `dingtalk_app`, `dingtalk_webhook`, `feishu`, `telegram`, `smtp`, `wxpusher`
+4. Channel specs are defined in `CHANNEL_REGISTRY` with `required_keys`, `optional_keys`, `send_mode`, `supports_markdown`
+
+When adding a new notification channel: add entry to `CHANNEL_REGISTRY` in notify_service.py, implement the send function in notify.py, and add mapping in `NOTIFY_CHANNEL_FUNCTIONS`.
+
+### Prompt Management
+
+Prompts are centralized in `prompt_service.py`:
+- Default prompts in `DEFAULT_PROMPT_CONFIG` dict
+- DB override via `load_config_from_db("prompt_config")` — DB values take precedence
+- Templates use `{{variable}}` syntax, rendered via `render_template()` or `get_rendered_prompt()`
+- **Never hardcode LLM prompts in other modules** — always use `get_prompt(key)` or `get_rendered_prompt()`
 
 ### Key Design Patterns
 
-**1. Configuration Hierarchy** (lowest to highest priority):
-- [config.py](config.py) - Default values
-- `runtime_config.json` - Runtime overrides (legacy, deprecated)
-- Database `system_config` table - Highest priority, takes precedence over all
+**1. Configuration Hierarchy** (lowest → highest priority):
+- `config.py` defaults → `runtime_config.json` (legacy) → Database `system_config` table (highest)
 
-To update config at runtime, use API endpoints `/api/config/{name}` - these persist to the database.
-
-**2. Thread-Safe Database**: MySQL uses `threading.local()` for per-thread connection pooling. Always use:
+**2. Thread-Safe Database**: Always use:
 ```python
-from services import get_mysql_connection
 conn = get_mysql_connection()
 with conn.cursor() as cursor:
     cursor.execute(sql)
 conn.commit()
 ```
+Never call `pymysql.connect()` directly or share connections across threads.
 
-**3. Background Processing**: The fetch pipeline uses producer-consumer pattern:
-- Main thread fetches and saves to `papers_raw`
-- Background thread continuously reads `processed=0` records, filters, translates, and saves to `papers_relevant`
+**3. Background Processing**: Producer-consumer pattern — main thread fetches to `papers_raw`, background thread processes (`processed=0` records) via LLM filter + translation.
 
-**4. Auto-Migration**: `_ensure_tables_exist()` in mysql_service.py automatically adds missing columns
+**4. Auto-Migration**: `_ensure_tables_exist()` in mysql_service.py automatically adds missing columns.
 
-## Configuration
+## Database
 
-**Core Settings** ([config.py](config.py)):
+Supports MySQL and SQLite (configurable via `ARXIV_CONFIG['mysql']['db_type']`, SQLite path in `sqlite_path`).
 
-- `RESEARCH_DESCRIPTION`: Research area context for LLM filtering
-- `ARXIV_CONFIG['keywords']`: arXiv categories to search (cs.CL, cs.CV, cs.LG, cs.AI, cs.IR)
-- `LLM_FILTER_CONFIG['min_score']`: Relevance threshold (default: 60/100)
-- `SCHEDULE_CONFIG`: Fetch time (02:00) and push times (09:00, 14:30)
+Tables:
+- `papers_raw`: Original papers with `processed` flag
+- `papers_relevant`: Filtered papers with translations, scores, `is_pushed` flag
+- `paper_queue`: Push queue
+- `system_config`: Runtime config storage
 
-## API Conventions
+**The `Stars` column stores 0-100 scores** (not 1-5 stars) for backwards compatibility.
 
-- All API routes prefixed with `/api/`
-- Response format: `{"success": bool, "data": ..., "message": ...}`
-- Use Pydantic BaseModel for request bodies
-- View full API documentation at `/docs` when server is running
+## Frontend
 
-## Database Schema
-
-- `papers_raw`: Original fetched papers with `processed` flag
-- `papers_relevant`: Filtered papers with translations, scores, and `is_pushed` flag
-- `paper_queue`: Push queue (papers awaiting notification)
-- `system_config`: Runtime configuration storage
-
-**Important**: The `Stars` column stores 0-100 scores (not 1-5 stars) for backwards compatibility.
+Single-file Vue 3 SPA in [static/index.html](static/index.html) using CDN-loaded Vue, Tailwind, Phosphor icons, and Chart.js. No build pipeline — do not introduce one unless explicitly asked.
 
 ## Code Style
 
-- **Comments & Docstrings**: Must be in **Chinese (Simplified)**
-- **Log Messages**: Must be in **Chinese (Simplified)**
-- **Variable/Function Names**: English `snake_case` (e.g., `get_paper_list`)
-- **Class Names**: English `CamelCase` (e.g., `ArxivService`)
-- **Indentation**: 4 spaces (PEP 8)
+- **Comments, docstrings, log messages**: Simplified Chinese (中文)
+- **Variable/function names**: English `snake_case`
+- **Class names**: English `CamelCase`
+- **Internal helpers**: leading underscore (e.g., `_normalize_sql`)
+- **Imports**: stdlib → third-party → local modules
+- **Type hints**: add on new functions when practical; do not force repo-wide typing migration
+- **Logging**: `logger = logging.getLogger(__name__)`; emoji markers (⚠️, ✅, 💾, 🚀) are acceptable
 
 ## Development Guidelines
 
 ### Adding New Services
 1. Create `xxx_service.py` in `services/`
-2. Use `XxxService` class naming convention
-3. Import config from `config.py`, never hardcode
+2. `XxxService` class naming
+3. Import config from `config.py` — never hardcode
 4. Export via `services/__init__.py`
 
-### LLM Service Notes
+### LLM Service
 - Uses `httpx.Client` with proxy disabled
-- Built-in retry: 3 attempts, 5-second intervals
-- Parallel processing configurable via `max_workers` in config
+- Retry: 3 attempts, 5-second intervals
+- Parallel processing via `max_workers`
 
 ### Modifying Paper Scoring
-Edit `_build_evaluation_prompt()` in [llm_filter_service.py](services/llm_filter_service.py:70). The system uses 100-point scoring where 60+ indicates relevance.
+Edit prompt templates in `prompt_service.py`. The evaluation prompt (`llm_evaluation_template`) scores on 4 dimensions (0-25 each): problem_relevance, method_transferability, data_resource, technical_depth. Total ≥ 60 passes.
 
-### Rescoring Papers
-The project includes a rescore utility in [tools/rescore_papers.py](tools/rescore_papers.py) with options:
-- `--dry-run`: Preview changes without database updates
-- `--convert-only`: Convert legacy 5-star ratings to 100-point scale
-- `--workers N`: Set parallel worker count
-- `--limit N`: Limit number of papers to process
-
-### Other Maintenance Scripts
-
-Located in [tools/](tools/) directory:
-- [rebuild_queue.py](tools/rebuild_queue.py): Clears and rebuilds paper_queue from papers_relevant with Stars >= 60
-- [re_evaluate_failed.py](tools/re_evaluate_failed.py): Re-evaluates papers where LLM scoring failed (papers with "评估失败" in RelevanceReason)
-- [reset_processed_2026.py](tools/reset_processed_2026.py): Reset processing status for reprocessing
-- [fix_created_at.py](tools/fix_created_at.py): Data consistency fixes for created_at timestamps
-
-## Manual Operations
-
-The API provides several endpoints for triggering tasks manually:
-- `POST /api/actions/fetch-now`: Immediately fetch papers from arXiv (runs in background)
-- `POST /api/actions/push-now`: Immediately push papers to DingTalk
-- `POST /api/actions/process-now`: Process unprocessed papers from `papers_raw`
-- `GET /api/logs/list`: List available log files
-- `GET /api/logs/content`: View log content (last N lines)
-
-## Troubleshooting
-
-**Frontend shows 404**: Ensure `static/index.html` exists. The frontend is served from the `static/` directory. If missing, you can still use the Swagger UI at `/docs`.
-
-**Papers not being processed**: Check `/api/papers/stats` for unprocessed counts. Use `/api/actions/process-now` to manually trigger processing.
-
-**Queue issues**: Use `/api/queue/status` to check queue state. Run `rebuild_queue.py` to rebuild from `papers_relevant`.
-
-**LLM evaluation failures**: Papers with failed evaluations retain `processed=0` in `papers_raw`. Run `re_evaluate_failed.py` to retry them.
+### Error Handling
+- Service layer: catch exceptions, log in Chinese, return safe fallbacks (`[]`, `{}`, etc.)
+- API layer: log then `raise HTTPException(status_code=500, detail=str(e))`
+- No empty `except` blocks
 
 ## Scheduler
 
-The built-in scheduler ([app.py:333-405](app.py#L333-L405)) runs automatically:
-- **Fetch Task**: Daily at `SCHEDULE_CONFIG['fetch_papers']['time']` (default 02:00)
-- **Push Task**: Daily at `SCHEDULE_CONFIG['push_papers']['times']` (default 09:00, 14:30)
+Built-in scheduler in app.py runs automatically:
+- **Fetch**: Daily at `SCHEDULE_CONFIG['fetch_papers']['time']` (default 02:00)
+- **Push**: Daily at `SCHEDULE_CONFIG['push_papers']['times']` (default 09:00, 14:30)
+- Reload after config changes: `POST /api/scheduler/reload`
 
-Reload scheduler after config changes: `POST /api/scheduler/reload`
+## Manual API Endpoints
 
-## Important File References
+- `POST /api/actions/fetch-now`: Fetch papers from arXiv (background)
+- `POST /api/actions/push-now`: Push papers via notification channel
+- `POST /api/actions/process-now`: Process unprocessed papers
+- `POST /api/scheduler/reload`: Reload scheduler config
+- `GET /api/papers/stats`: Check unprocessed counts
+- `GET /api/queue/status`: Check push queue state
 
-- Main application: [app.py](app.py)
-- Central configuration: [config.py](config.py)
-- ArXiv integration: [services/arxiv_service.py](services/arxiv_service.py)
-- LLM filtering: [services/llm_filter_service.py](services/llm_filter_service.py)
-- Database operations: [services/mysql_service.py](services/mysql_service.py)
-- Frontend (Vue3 SPA): [static/index.html](static/index.html)
+## Verification
+
+No formal test workflow in-repo. Tests exist in `tests/` using pytest + FastAPI TestClient with mocking:
+```bash
+pytest tests/test_setup_api.py           # Setup API tests (DB/LLM connection, notify)
+pytest tests/test_integration_llm_config.py  # LLM config integration tests
+```
+
+For manual verification: `python app.py` → hit `/api/health` → exercise relevant endpoints.

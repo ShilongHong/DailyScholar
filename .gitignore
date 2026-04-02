@@ -47,6 +47,12 @@ logs/
 # Output
 output/
 
+# Local runtime data and generated artifacts
+data/
+papers_pdf/
+static/assets/
+docs/superpowers/
+
 # Backup files
 *.bak
 *.backup
@@ -86,3 +92,5 @@ node_modules/
 *.sql
 *.sqlite
 *.db
+
+

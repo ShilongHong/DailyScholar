@@ -1,138 +1,267 @@
-# DailyScholar v3.0 — Agent Knowledge Base
+# DailyScholar v3.0 — Agent Guide
 
-**Generated:** 2026-03-24 | **Commit:** eecc59a | **Branch:** main
+## Overview
 
-## OVERVIEW
-"Three-in-One" Python application: FastAPI backend + built-in scheduler + Vue3 SPA frontend. Single process on port `20001`. Fetches arXiv papers, filters via LLM, translates to Chinese, pushes to DingTalk. **DailyScholar** - Your AI research assistant.
+DailyScholar is a single-process Python application that combines:
+- FastAPI backend
+- built-in scheduler
+- Vue 3 SPA served from `static/index.html`
 
-## STRUCTURE
-```
-dailyscholar/
-├── app.py           # Entry point (FastAPI + scheduler + all routes) — 1052 lines
-├── config.py        # Central configuration (DB, LLM, DingTalk, schedule)
-├── services/        # Business logic layer — 8 modules, see services/AGENTS.md
-├── tools/           # Maintenance scripts — 6 scripts, see tools/AGENTS.md
-├── static/          # Vue3 SPA (single index.html with embedded app)
-├── logs/            # Runtime logs (daily rotation)
-└── docs/            # Documentation assets
-```
+Primary flow:
+`arXiv API -> raw papers -> LLM filtering -> translation -> queue -> notification`
 
-## WHERE TO LOOK
+Main entrypoint: `app.py`
+Main port: `20001`
 
-| Task | Location | Notes |
-|------|----------|-------|
-| Add/modify API endpoints | `app.py:498-1036` | All routes in single file, no router modules |
-| Modify LLM scoring prompt | `services/prompt_service.py` | DB `prompt_config` or local `DEFAULT_PROMPT_CONFIG` |
-| Modify translation prompt | `services/prompt_service.py` | `translation_template` key |
-| Add search keywords | API `/api/config/arxiv_config` or DB `system_config` table | Web/API first, `config.py` defaults as fallback |
-| Change fetch/push times | API `/api/config/schedule_config` or `config.py:137` | Reload via `/api/scheduler/reload` |
-| Thread-safe DB operations | `services/mysql_service.py:43-82` | `get_mysql_connection()` only |
-| Fix translation issues | `services/translation_service.py` | Uses prompt_service for prompts |
-| Debug scheduler | `app.py:387-461` | `PaperScheduler` class |
-| Manual operations | `POST /api/actions/*` | `fetch-now`, `push-now`, `process-now` |
+## Repository Layout
 
-## CODE MAP
-
-| Symbol | Type | Location | Refs | Role |
-|--------|------|----------|------|------|
-| `PaperScheduler` | Class | app.py:387 | 3 | Manages fetch/push schedule |
-| `LLMFilterService` | Class | services/llm_filter_service.py:33 | 5 | Paper relevance scoring |
-| `get_mysql_connection` | Func | services/mysql_service.py:43 | 20+ | Thread-safe DB connection |
-| `run_fetch_papers` | Func | app.py:162 | 2 | Main fetch pipeline |
-| `run_push_papers` | Func | app.py:326 | 2 | DingTalk push pipeline |
-| `ArxivService` | Class | services/arxiv_service.py | 2 | arXiv API integration |
-| `TranslationService` | Class | services/translation_service.py | 2 | CN/EN translation |
-| `PromptService` | Module | services/prompt_service.py | 3 | Prompt management with DB fallback |
-
-## Prompt Management (NEW)
-
-### Architecture
-All LLM prompts are now managed through `services/prompt_service.py`:
-- **Initialization**: Loads from local `DEFAULT_PROMPT_CONFIG`
-- **Runtime**: Priority reads from DB `system_config.prompt_config`, falls back to local defaults
-
-### Available Prompt Keys
-| Key | Description | Used By |
-|-----|-------------|---------|
-| `llm_system_prompt` | System message for paper evaluation | llm_filter_service |
-| `llm_few_shot_examples` | Few-shot scoring examples | llm_filter_service |
-| `llm_scoring_anchors` | Keyword-based scoring guidelines | llm_filter_service |
-| `llm_evaluation_template` | Main evaluation prompt template | llm_filter_service |
-| `translation_system_prompt` | System message for translation | translation_service |
-| `translation_template` | Translation prompt template | translation_service |
-
-### Modifying Prompts
-1. **Via Database** (Hot reload, no restart needed):
-   ```sql
-   INSERT INTO system_config (config_name, config_value) 
-   VALUES ('prompt_config', '{"llm_system_prompt": "..."}');
-   ```
-2. **Via Code**: Edit `services/prompt_service.py` → `DEFAULT_PROMPT_CONFIG`
-
-### Template Variables
-Prompts support `{{variable}}` substitution:
-- `{{research_description}}` - User's research area
-- `{{paper_title}}`, `{{paper_abstract}}` - Paper content
-- `{{scoring_anchors}}`, `{{few_shot_examples}}` - Dynamic prompt sections
-
-## CONVENTIONS
-
-### Language (CRITICAL)
-- **Comments/Docstrings/Logs**: MUST be Chinese (Simplified)
-- **Variable/Function names**: English `snake_case`
-- **Class names**: English `CamelCase`
-- **Constants**: `UPPER_SNAKE_CASE`
-
-### Configuration Hierarchy (highest wins)
-1. Database `system_config` table ← **check first**
-2. `config.py` defaults
-
-### Onboarding and Setup
-- Prefer Web initialization wizard and `/api/config/*` for normal setup and configuration updates.
-- Keep `config.py` as safe committed defaults/fallback values, not as the primary day-to-day setup path.
-
-### API Response Format
-```python
-{"success": bool, "data": ..., "message": ...}
+```text
+daliy_paper_v3/
+├── app.py                    # FastAPI app, scheduler, and all routes
+├── config.py                 # Default configuration constants
+├── requirements.txt          # Runtime Python dependencies
+├── services/                 # Business logic layer
+├── static/index.html         # Single-file Vue 3 frontend
+├── tests/                    # Pytest-style tests exist here
+├── test/                     # Ad hoc test script(s)
+├── docs/                     # Docs and screenshots
+└── .github/copilot-instructions.md
 ```
 
-## ANTI-PATTERNS (FORBIDDEN)
+## Authoritative Repo Rules
 
-| Forbidden | Correct | Why |
-|-----------|---------|-----|
-| `pymysql.connect()` directly | `get_mysql_connection()` | Thread-safety |
-| Sharing `conn` across threads | New connection per thread | Race conditions |
-| Global `_mysql_connection` variable | `_thread_local` storage | Broken pattern |
-| Non-Chinese comments/logs | Chinese (Simplified) | Project convention |
-| Hardcoded config values | Import from `config.py` | Config hot-reload |
+There is a Copilot instruction file at `.github/copilot-instructions.md`. Its guidance is consistent with the codebase and should be followed.
 
-### Dead Code Warning
-`mysql_service.py:85-94` — `close_mysql_connection()` references undefined global. Do NOT use.
+No `.cursorrules` file was found.
+No `.cursor/rules/` directory was found.
 
-## COMMANDS
+## Build / Run / Test / Lint Commands
+
+### Install dependencies
 
 ```bash
-# Install
 pip install -r requirements.txt
-
-# Run (starts API + scheduler + frontend)
-python app.py
-
-# Access points
-# Frontend:  http://localhost:20001
-# API docs:  http://localhost:20001/docs
-# Health:    http://localhost:20001/api/health
-
-# Manual triggers
-curl -X POST http://localhost:20001/api/actions/fetch-now
-curl -X POST http://localhost:20001/api/actions/push-now
-curl -X POST http://localhost:20001/api/actions/process-now
 ```
 
-## NOTES
+Source of truth:
+- `requirements.txt`
+- `README.md`
+- `.github/copilot-instructions.md`
 
-- **No tests**: Manual verification via API endpoints
-- **No auth**: All endpoints publicly accessible
-- **No router modules**: All 20+ endpoints in `app.py`
-- **Monolithic structure**: Not a monorepo, single app with services layer
-- `tools/` = maintenance scripts (non-standard naming, typically `scripts/`)
+### Run the app
+
+```bash
+python app.py
+```
+
+Then access:
+- UI: `http://localhost:20001`
+- API docs: `http://localhost:20001/docs`
+- Health: `http://localhost:20001/api/health`
+
+### Tests
+
+This repo contains pytest-style tests in `tests/`, but pytest is **not** declared in `requirements.txt`, and there is no `pytest.ini`, `pyproject.toml`, or other authoritative test config.
+
+That means:
+- tests exist
+- `.pytest_cache/` exists
+- but automated test tooling is **not formally configured** in-repo
+
+If your environment already has `pytest` installed, these are the likely commands:
+
+```bash
+pytest tests
+pytest tests/test_setup_api.py
+pytest tests/test_setup_api.py -k <pattern>
+pytest tests/test_integration_llm_config.py::test_name
+```
+
+Use those as ad hoc commands, not as guaranteed project-supported workflows.
+
+### Single test execution
+
+Preferred when pytest is available:
+
+```bash
+pytest tests/test_setup_api.py::test_name
+```
+
+or pattern-based:
+
+```bash
+pytest tests/test_setup_api.py -k keyword
+```
+
+### Lint / format / type-check
+
+No authoritative lint/type config files were found:
+- no `pyproject.toml`
+- no `ruff.toml` / `.ruff.toml`
+- no `mypy.ini`
+- no `.flake8`
+- no `pylintrc`
+
+Observations:
+- `.ruff_cache/` exists, so Ruff has been run locally before
+- LSP diagnostics report many Python warnings, but no current `.py` errors
+
+Implication for agents:
+- do **not** invent a required lint command
+- prefer targeted verification over claiming a nonexistent repo-wide lint workflow
+
+## Verification Guidance
+
+Because tooling is light, verification should usually be:
+1. `python app.py` for startup sanity
+2. hit `/api/health`
+3. manually exercise relevant `/api/*` endpoints
+4. for frontend changes, verify behavior through the served SPA
+
+Manual action endpoints:
+- `POST /api/actions/fetch-now`
+- `POST /api/actions/process-now`
+- `POST /api/actions/push-now`
+
+Scheduler endpoint:
+- `POST /api/scheduler/reload`
+
+## Architecture Notes
+
+### Backend
+- All routes live in `app.py`; there are no router modules.
+- Request bodies use Pydantic `BaseModel` classes.
+- Most route responses follow `{"success": bool, "data": ..., "message": ...}`.
+- Some infra endpoints like `/api/health` return custom payloads.
+
+### Services
+- Business logic lives under `services/`.
+- Shared service exports are re-exported through `services/__init__.py`.
+- Prompt management is centralized in `services/prompt_service.py`.
+- Notification dispatch now centers on `services/notify_service.py`.
+
+### Frontend
+- Frontend is a single-file Vue 3 app in `static/index.html`.
+- It uses CDN-loaded Vue, Tailwind, Phosphor icons, and Chart.js.
+- Avoid introducing a bundler/toolchain unless the user explicitly asks.
+
+## Code Style Conventions
+
+### Language
+- Comments: Simplified Chinese
+- Docstrings: Simplified Chinese
+- Log messages: Simplified Chinese
+- User-facing UI copy: Simplified Chinese
+
+### Naming
+- variables/functions: `snake_case`
+- classes: `CamelCase`
+- constants: `UPPER_SNAKE_CASE`
+- internal helpers: leading underscore, e.g. `_normalize_sql`
+
+### Imports
+- Order imports as: standard library -> third-party -> local modules
+- Common local import patterns:
+
+```python
+from config import ARXIV_CONFIG, LLM_FILTER_CONFIG
+from services import get_mysql_connection
+from services.prompt_service import get_prompt, get_rendered_prompt
+```
+
+### Formatting
+- Match existing Python style; there is no formal formatter config
+- Keep line length moderate and use wrapped calls like the existing code
+- Prefer small helper functions over deeply nested route logic where practical
+
+### Types
+- Add type hints on new functions when practical
+- Follow the repo's existing mixed style:
+  - modern builtins like `dict[str, Any]` appear in `app.py`
+  - older `Dict[str, Any]` / `List[...]` style still appears in services
+- Do not force a repo-wide typing migration during a small change
+
+### API Models
+- Use Pydantic `BaseModel` for request bodies
+- Keep field names aligned with current API payloads
+- Preserve existing response shapes unless explicitly changing the API contract
+
+## Error Handling Conventions
+
+- Service layer usually catches exceptions, logs in Chinese, and returns safe fallbacks
+- API layer often logs then raises `HTTPException(status_code=500, detail=str(e))`
+- Retry external LLM/API calls when matching existing patterns
+- Avoid empty `except` blocks unless the existing local pattern truly requires silent cleanup
+
+Typical patterns:
+- return `[]` / `{}` / fallback values from service helpers
+- log warnings for recoverable failures
+- log errors for final failure paths
+
+## Configuration Rules
+
+Configuration precedence is important:
+1. database `system_config`
+2. `runtime_config.json`
+3. `config.py` defaults
+
+Follow these rules:
+- prefer DB-backed runtime config for active behavior
+- use `config.py` as defaults/fallbacks
+- do not hardcode values that already exist in config
+- prefer Web setup or `/api/config/*` flows for operational changes
+
+Prompt-specific rule:
+- prompts should come from `services/prompt_service.py`
+- do not hardcode LLM prompts in unrelated modules
+
+## Database Rules
+
+Thread safety is critical.
+
+Always use the repo helpers:
+
+```python
+conn = get_mysql_connection()
+with conn.cursor() as cursor:
+    cursor.execute(sql)
+conn.commit()
+```
+
+Never:
+- call `pymysql.connect()` directly in feature code
+- share a connection across threads
+- reintroduce a global DB connection pattern
+
+SQLite is also supported; `mysql_service.py` abstracts both SQLite and MySQL.
+
+## Logging Rules
+
+- Use `logger = logging.getLogger(__name__)`
+- Keep logs in Chinese
+- Existing code often uses emoji markers like `⚠️`, `✅`, `💾`, `🚀`; matching them is acceptable
+- Log enough context to debug external calls and background tasks
+
+## Known Project Constraints
+
+- This is a monolithic app; do not assume modular FastAPI routers
+- There is no formal frontend build pipeline
+- There is no formally configured lint/type/test workflow in-repo
+- Existing Python code has many type-related warnings; do not expand them casually
+- `close_mysql_connection()` has been flagged historically as risky/dead-code territory; avoid introducing dependencies on it without re-validating the implementation
+
+## Agent Do / Do Not
+
+Do:
+- make minimal, pattern-matching changes
+- keep Chinese comments/logs consistent with surrounding code
+- preserve API response shapes
+- verify changes with actual endpoint/manual checks when tests are absent
+- check both backend and `static/index.html` when a feature crosses UI/API boundaries
+
+Do not:
+- add new frameworks or build systems without being asked
+- invent unsupported repo commands
+- bypass `mysql_service` connection helpers
+- hardcode runtime config or prompt text that already has a managed source
+- refactor unrelated modules during a bug fix

@@ -21,9 +21,9 @@
 - 单进程启动，FastAPI 后端 + Vue3 前端 + 内置调度器，部署路径清晰。
 
 ## TODO 有好的功能都可以提issue~
-- 论文精读智能体，生成一份完整的段落级别的快速全文阅读报告，创新点，对我的帮助，快速总结（30%）
+- 论文精读智能体，生成一份完整的段落级别的快速全文阅读报告，创新点，对我的帮助，快速总结（50%）
 - 接入openclaw（0%）
-- 重构UI为VUE（0%）
+- 重构UI为VUE（100%）
 - 接入更多的论文检索平台（0%）
 
 ## 界面预览
@@ -39,6 +39,10 @@
 ### 论文详情抽屉
 
 ![Detail](docs/images/detail.png)
+
+### 论文阅读器
+
+![Reader](docs/images/reader.png)
 
 ### 配置中心
 
@@ -62,6 +66,9 @@
 - 仪表盘看系统状态、论文数量和运行情况。
 - 论文列表支持筛选、排序和搜索。
 - 论文详情抽屉展示中英内容、推荐理由和补充信息。
+- 论文阅读器支持 `PDF / Markdown / HTML` 三视图切换，并提供右侧信息栏与 AI 精读对话区。
+- 全文翻译支持流式进度展示，完成后可在 Markdown 视图中选择覆盖、双语逐段对照、显示原文。
+- 重新翻译会走强制重翻（不读取缓存），普通翻译会优先复用整篇与分块缓存。
 - 翻译结果会保留在系统中，方便回看和二次筛选。
 - 日志页可直接查看最新运行日志。
 
@@ -164,6 +171,21 @@ DailyScholar 首次启动时，会按这组接口完成初始化流程：
 - `POST /api/actions/fetch-now`
 - `POST /api/actions/process-now`
 - `POST /api/actions/push-now`
+
+### 阅读器与全文翻译
+
+- `GET /api/papers/{doi}/pdf`
+- `POST /api/papers/{doi}/convert`
+- `GET /api/papers/{doi}/convert/status`
+- `GET /api/papers/{doi}/markdown`
+- `GET /api/papers/{doi}/markdown/images/{image_name}`
+- `POST /api/papers/{doi}/translate-full`
+- `GET /api/papers/{doi}/translate-full/status`
+- `GET /api/papers/{doi}/translate-full/stream`
+- `DELETE /api/papers/{doi}/translate-full/cache`
+- `POST /api/papers/{doi}/chat`
+- `GET /api/papers/{doi}/chat/history`
+- `DELETE /api/papers/{doi}/chat`
 
 ### 日志
 

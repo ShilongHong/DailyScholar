@@ -16,9 +16,9 @@ from typing import Optional, List, Dict, Any, cast
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import schedule
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from openai import OpenAI
@@ -79,6 +79,10 @@ from services.notify_service import (
     NOTIFY_CHANNEL_SCHEMA,
     get_channel_spec,
 )
+from services.pdf_service import download_and_cache_pdf, serve_pdf, is_pdf_cached, get_pdf_path
+from services.annotation_service import get_annotations as db_get_annotations, save_annotations as db_save_annotations
+from services.mineru_service import convert_pdf_cloud, convert_pdf_cloud_batch, convert_pdf_local, poll_cloud_status, download_cloud_result, _get_mineru_config, get_image_path
+from services.chat_service import ChatService
 
 
 # ============================================================
@@ -105,6 +109,49 @@ def setup_logging():
 
 
 logger = setup_logging()
+
+
+# 全文翻译任务状态（进程内）
+FULL_TRANSLATION_TASKS: dict[str, dict[str, Any]] = {}
+FULL_TRANSLATION_LOCK = threading.Lock()
+
+
+def _set_full_translation_task(doi: str, payload: dict[str, Any]) -> None:
+    with FULL_TRANSLATION_LOCK:
+        current = FULL_TRANSLATION_TASKS.get(doi, {})
+        current.update(payload)
+        current["updated_at"] = datetime.now().isoformat()
+        FULL_TRANSLATION_TASKS[doi] = current
+
+
+def _get_full_translation_task(doi: str) -> Optional[dict[str, Any]]:
+    with FULL_TRANSLATION_LOCK:
+        task = FULL_TRANSLATION_TASKS.get(doi)
+        return dict(task) if task else None
+
+
+def _build_bilingual_markdown_from_alignment(
+    source_blocks: list[str], translated_blocks: list[str]
+) -> str:
+    """根据后端对齐分段构建逐段双语 Markdown。"""
+    if not source_blocks or not translated_blocks:
+        return ""
+
+    lines: list[str] = ["# 双语逐段对照", ""]
+    max_len = max(len(source_blocks), len(translated_blocks))
+
+    for idx in range(max_len):
+        src = source_blocks[idx] if idx < len(source_blocks) else ""
+        dst = translated_blocks[idx] if idx < len(translated_blocks) else ""
+
+        if src:
+            lines.extend([f"> 原文 {idx + 1}", "", src, ""])
+        if dst:
+            lines.extend([f"> 译文 {idx + 1}", "", dst, ""])
+
+        lines.extend(["---", ""])
+
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -1185,6 +1232,656 @@ async def retranslate_paper_endpoint(doi: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/papers/{doi}/pdf")
+async def get_paper_pdf(doi: str):
+    """获取论文 PDF（自动下载缓存）"""
+    try:
+        rows = execute_query(
+            "SELECT PDFLink, Link FROM papers_relevant WHERE DOI = %s",
+            (doi,)
+        )
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="论文不存在")
+
+        paper = rows[0]
+        pdf_url = paper.get("PDFLink") or paper.get("Link")
+        if not pdf_url:
+            raise HTTPException(status_code=404, detail="无 PDF 链接")
+
+        # 下载并缓存（如果尚未缓存）
+        download_and_cache_pdf(pdf_url, doi)
+
+        # 更新缓存状态
+        execute_update(
+            "UPDATE papers_relevant SET pdf_cached = TRUE WHERE DOI = %s",
+            (doi,)
+        )
+
+        return serve_pdf(doi)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取 PDF 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/papers/{doi}/html")
+def api_get_paper_html(doi: str):
+    """代理 arXiv HTML 页面用于内嵌阅读"""
+    try:
+        rows = execute_query(
+            "SELECT PDFLink, Link FROM papers_relevant WHERE DOI = %s",
+            (doi,)
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="论文不存在")
+
+        link = rows[0].get("PDFLink") or rows[0].get("Link", "")
+        if "arxiv.org/pdf/" not in link:
+            raise HTTPException(status_code=400, detail="非 arXiv 论文，不支持 HTML 阅读")
+
+        html_url = link.replace("/pdf/", "/html/")
+
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            resp = client.get(html_url)
+            if resp.status_code == 404:
+                raise HTTPException(status_code=404, detail="该论文没有 HTML 版本")
+            resp.raise_for_status()
+
+        html_content = resp.content.decode("utf-8", errors="replace")
+
+        # 将所有相对路径重写为 arxiv.org 绝对路径，确保 CSS/JS/图片从 arXiv 加载
+        import re
+        html_content = re.sub(
+            r'(href\s*=\s*["\'])/(?!/|http)',
+            r'\g<1>https://arxiv.org/',
+            html_content
+        )
+        html_content = re.sub(
+            r'(src\s*=\s*["\'])/(?!/|http)',
+            r'\g<1>https://arxiv.org/',
+            html_content
+        )
+        html_content = re.sub(
+            r'(action\s*=\s*["\'])/(?!/|http)',
+            r'\g<1>https://arxiv.org/',
+            html_content
+        )
+
+        return HTMLResponse(content=html_content, media_type="text/html; charset=utf-8")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取 HTML 页面失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/papers/{doi}/detail")
+async def get_paper_detail(doi: str):
+    """获取单篇论文详情"""
+    try:
+        rows = execute_query(
+            "SELECT * FROM papers_relevant WHERE DOI = %s",
+            (doi,)
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="论文不存在")
+        return {"success": True, "data": rows[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取论文详情失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== 标注 API =====
+
+@app.get("/api/papers/{doi}/annotations")
+async def api_get_annotations(doi: str):
+    """获取论文标注"""
+    try:
+        annotations = db_get_annotations(doi)
+        return {"success": True, "data": annotations}
+    except Exception as e:
+        logger.error(f"获取标注失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/papers/{doi}/annotations")
+async def api_save_annotations(doi: str, request: Request):
+    """保存论文标注"""
+    try:
+        body = await request.json()
+        result = db_save_annotations(doi, body.get("annotations", []))
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"保存标注失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== MinerU 转换 API =====
+
+@app.post("/api/papers/{doi}/convert")
+async def api_convert_paper(doi: str, request: Request):
+    """触发 PDF 转 Markdown"""
+    try:
+        body = await request.json()
+        mode = body.get("mode", "cloud")
+
+        # 获取论文信息
+        rows = execute_query(
+            "SELECT PDFLink, Link FROM papers_relevant WHERE DOI = %s",
+            (doi,)
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="论文不存在")
+
+        paper = rows[0]
+        pdf_url = paper.get("PDFLink") or paper.get("Link")
+        config = _get_mineru_config()
+
+        if mode == "local":
+            if not is_pdf_cached(doi):
+                raise HTTPException(status_code=400, detail="本地模式需要先下载 PDF，请先打开 PDF 预览")
+            pdf_path = get_pdf_path(doi)
+            endpoint = config.get("endpoint", "http://localhost:18000")
+            result = convert_pdf_local(pdf_path, endpoint)
+            if result.get("status") == "completed":
+                execute_update(
+                    "UPDATE papers_relevant SET markdown_content = %s, markdown_images = %s WHERE DOI = %s",
+                    (result["markdown"], json.dumps(result.get("images", [])), doi)
+                )
+            return {"success": True, "data": result}
+        else:
+            # 云端模式：优先用论文 PDFLink URL，无 URL 则本地缓存批量上传
+            api_key = config.get("api_key", "")
+            if not api_key:
+                raise HTTPException(status_code=400, detail="未配置 MinerU API Key")
+
+            if pdf_url:
+                # 有公网 URL，用单文件 API
+                result = convert_pdf_cloud(pdf_url, api_key)
+            elif is_pdf_cached(doi):
+                # 无公网 URL 但有本地缓存，用批量上传 API
+                pdf_path = get_pdf_path(doi)
+                result = convert_pdf_cloud_batch(pdf_path, api_key)
+            else:
+                raise HTTPException(status_code=400, detail="无可用的 PDF 来源（无公网链接且未缓存）")
+
+            # 保存 task_id 以便后续轮询
+            if result.get("task_id"):
+                execute_update(
+                    "UPDATE papers_relevant SET markdown_images = %s WHERE DOI = %s",
+                    (json.dumps({"mineru_task_id": result["task_id"]}), doi)
+                )
+            return {"success": True, "data": result}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"转换失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/papers/{doi}/convert/status")
+async def api_convert_status(doi: str):
+    """查询转换状态（云端模式会自动轮询并存储结果）"""
+    rows = execute_query(
+        "SELECT markdown_content, markdown_images FROM papers_relevant WHERE DOI = %s",
+        (doi,)
+    )
+
+    if not rows:
+        return {"success": True, "data": {"status": "pending"}}
+
+    row = rows[0]
+    if row.get("markdown_content"):
+        return {"success": True, "data": {"status": "completed"}}
+
+    # 检查是否有进行中的云端任务
+    images_data = row.get("markdown_images")
+    task_id = None
+    if images_data:
+        if isinstance(images_data, str):
+            try:
+                images_data = json.loads(images_data)
+            except (json.JSONDecodeError, TypeError):
+                images_data = {}
+        if isinstance(images_data, dict) and images_data.get("mineru_task_id"):
+            task_id = images_data["mineru_task_id"]
+
+    if task_id:
+        try:
+            config = _get_mineru_config()
+            api_key = config.get("api_key", "")
+            if api_key:
+                status_data = poll_cloud_status(task_id, api_key)
+                task_state = status_data.get("state", "")
+
+                if task_state == "done":
+                    # 下载并存储结果
+                    result = download_cloud_result(task_id, api_key, doi)
+                    if result.get("status") == "completed" and result.get("markdown"):
+                        execute_update(
+                            "UPDATE papers_relevant SET markdown_content = %s, markdown_images = %s WHERE DOI = %s",
+                            (result["markdown"], json.dumps(result.get("images", [])), doi)
+                        )
+                        return {"success": True, "data": {"status": "completed"}}
+                    else:
+                        return {"success": True, "data": {"status": "failed", "error": result.get("error", "下载结果失败")}}
+                elif task_state == "failed":
+                    return {"success": True, "data": {"status": "failed", "error": status_data.get("error", "转换失败")}}
+                elif task_state in ("pending", "running"):
+                    return {"success": True, "data": {"status": "processing"}}
+
+                return {"success": True, "data": {"status": "processing"}}
+        except Exception as e:
+            logger.warning(f"轮询云端转换状态失败: {e}")
+
+    return {"success": True, "data": {"status": "pending"}}
+
+
+@app.get("/api/papers/{doi}/markdown")
+async def api_get_markdown(doi: str):
+    """获取转换后的 Markdown"""
+    rows = execute_query(
+        "SELECT markdown_content, markdown_images FROM papers_relevant WHERE DOI = %s",
+        (doi,)
+    )
+
+    if not rows or not rows[0].get("markdown_content"):
+        raise HTTPException(status_code=404, detail="尚未转换为 Markdown")
+
+    row = rows[0]
+    images = row.get("markdown_images")
+    if isinstance(images, str):
+        try:
+            images = json.loads(images)
+        except (json.JSONDecodeError, TypeError):
+            images = []
+    # 过滤掉内部 task_id 元数据
+    if isinstance(images, dict):
+        images = images.get("images", [])
+
+    return {"success": True, "data": {"markdown": row["markdown_content"], "images": images or []}}
+
+
+@app.get("/api/papers/{doi}/markdown/images/{image_name}")
+async def api_get_markdown_image(doi: str, image_name: str):
+    """获取 MinerU 转换后的 Markdown 引用图片"""
+    img_path = get_image_path(doi, image_name)
+    if not os.path.exists(img_path):
+        raise HTTPException(status_code=404, detail="图片不存在")
+    return FileResponse(img_path)
+
+
+# ===== 全文翻译 API =====
+
+async def _run_full_translation_task(doi: str, text: str) -> None:
+    """后台执行全文翻译并持续更新任务状态。"""
+    try:
+        from services.translation_service import TranslationService
+
+        llm_config = get_config("llm_filter")
+        translation_svc = TranslationService(config=llm_config)
+
+        def _on_progress(progress: dict[str, Any]) -> None:
+            _set_full_translation_task(
+                doi,
+                {
+                    "status": progress.get("status", "processing"),
+                    "progress": progress.get("progress", 0),
+                    "current": progress.get("current", 0),
+                    "total": progress.get("total", 0),
+                    "message": progress.get("message", "正在翻译..."),
+                },
+            )
+
+        full_translation = await asyncio.to_thread(
+            translation_svc.translate_text,
+            text,
+            "en",
+            "zh",
+            doi,
+            _on_progress,
+        )
+
+        alignment = translation_svc.get_last_alignment()
+        bilingual_markdown = _build_bilingual_markdown_from_alignment(
+            alignment.get("source_blocks", []),
+            alignment.get("translated_blocks", []),
+        )
+
+        execute_update(
+            "UPDATE papers_relevant SET full_translation = %s WHERE DOI = %s",
+            (full_translation, doi),
+        )
+
+        _set_full_translation_task(
+            doi,
+            {
+                "status": "completed",
+                "progress": 100,
+                "current": _get_full_translation_task(doi).get("total", 0) if _get_full_translation_task(doi) else 0,
+                "total": _get_full_translation_task(doi).get("total", 0) if _get_full_translation_task(doi) else 0,
+                "message": "翻译完成",
+                "translation": full_translation,
+                "bilingual_markdown": bilingual_markdown,
+            },
+        )
+    except Exception as e:
+        logger.error(f"全文翻译后台任务失败: {e}")
+        _set_full_translation_task(
+            doi,
+            {
+                "status": "failed",
+                "progress": 0,
+                "message": "翻译失败",
+                "error": str(e),
+            },
+        )
+
+@app.post("/api/papers/{doi}/translate-full")
+async def api_translate_full(doi: str, request: Request):
+    """触发全文翻译（后台任务）"""
+    try:
+        body = await request.json()
+        source = body.get("source", "markdown")
+        force = bool(body.get("force", False))
+
+        existing_task = _get_full_translation_task(doi)
+        if existing_task and existing_task.get("status") == "processing":
+            return {"success": True, "data": existing_task}
+
+        rows = execute_query(
+            "SELECT markdown_content, Abstract, full_translation FROM papers_relevant WHERE DOI = %s",
+            (doi,)
+        )
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="论文不存在")
+
+        row = rows[0]
+
+        # 已有全文翻译则直接复用，避免重复翻译
+        if not force and row.get("full_translation"):
+            reused_translation = row.get("full_translation")
+            _set_full_translation_task(
+                doi,
+                {
+                    "status": "completed",
+                    "progress": 100,
+                    "current": 1,
+                    "total": 1,
+                    "message": "复用已有全文翻译",
+                    "translation": reused_translation,
+                    "source": source,
+                    "error": "",
+                },
+            )
+            return {
+                "success": True,
+                "data": {
+                    "status": "completed",
+                    "progress": 100,
+                    "message": "复用已有全文翻译",
+                    "translation": reused_translation,
+                },
+            }
+
+        text = ""
+        if source == "markdown" and row.get("markdown_content"):
+            text = row["markdown_content"]
+        elif row.get("Abstract"):
+            text = row["Abstract"]
+        else:
+            raise HTTPException(status_code=400, detail="无可翻译的内容")
+
+        _set_full_translation_task(
+            doi,
+            {
+                "status": "processing",
+                "progress": 0,
+                "current": 0,
+                "total": 0,
+                "message": "翻译任务已启动",
+                "source": source,
+                "error": "",
+            },
+        )
+
+        asyncio.create_task(_run_full_translation_task(doi, text))
+
+        return {
+            "success": True,
+            "data": {
+                "status": "processing",
+                "progress": 0,
+                "message": "翻译任务已启动",
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"全文翻译失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/papers/{doi}/translate-full/status")
+async def api_translate_full_status(doi: str):
+    """查询全文翻译任务状态"""
+    task = _get_full_translation_task(doi)
+    if task:
+        return {"success": True, "data": task}
+
+    rows = execute_query(
+        "SELECT full_translation FROM papers_relevant WHERE DOI = %s",
+        (doi,),
+    )
+    if rows and rows[0].get("full_translation"):
+        return {
+            "success": True,
+            "data": {
+                "status": "completed",
+                "progress": 100,
+                "message": "翻译完成",
+                "translation": rows[0]["full_translation"],
+            },
+        }
+
+    return {
+        "success": True,
+        "data": {
+            "status": "pending",
+            "progress": 0,
+            "message": "暂无翻译任务",
+        },
+    }
+
+
+@app.delete("/api/papers/{doi}/translate-full/cache")
+async def api_clear_translate_full_cache(doi: str):
+    """清除某论文的全文翻译缓存（分块缓存 + 全文缓存）。"""
+    try:
+        from services.translation_service import TranslationService
+
+        chunk_deleted = TranslationService.clear_chunk_cache_for_doi(doi)
+        full_deleted = execute_update(
+            "UPDATE papers_relevant SET full_translation = NULL WHERE DOI = %s",
+            (doi,),
+        )
+
+        _set_full_translation_task(
+            doi,
+            {
+                "status": "pending",
+                "progress": 0,
+                "current": 0,
+                "total": 0,
+                "message": "缓存已清除",
+                "error": "",
+                "translation": "",
+            },
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "doi": doi,
+                "chunk_cache_deleted": chunk_deleted,
+                "full_translation_cleared": full_deleted > 0,
+            },
+        }
+    except Exception as e:
+        logger.error(f"清除翻译缓存失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/papers/{doi}/translate-full/stream")
+async def api_translate_full_stream(doi: str):
+    """SSE 流式返回全文翻译进度。"""
+
+    async def event_generator():
+        last_payload = ""
+        idle_rounds = 0
+        max_idle_rounds = 30 * 60  # 最多保持 30 分钟
+
+        while idle_rounds < max_idle_rounds:
+            task = _get_full_translation_task(doi)
+
+            if task:
+                payload = {
+                    "status": task.get("status", "processing"),
+                    "progress": task.get("progress", 0),
+                    "current": task.get("current", 0),
+                    "total": task.get("total", 0),
+                    "message": task.get("message", "正在翻译..."),
+                    "error": task.get("error", ""),
+                }
+                if task.get("status") == "completed":
+                    payload["translation"] = task.get("translation", "")
+                    payload["bilingual_markdown"] = task.get("bilingual_markdown", "")
+            else:
+                rows = execute_query(
+                    "SELECT full_translation FROM papers_relevant WHERE DOI = %s",
+                    (doi,),
+                )
+                if rows and rows[0].get("full_translation"):
+                    payload = {
+                        "status": "completed",
+                        "progress": 100,
+                        "current": 1,
+                        "total": 1,
+                        "message": "翻译完成",
+                        "translation": rows[0]["full_translation"],
+                        "error": "",
+                    }
+                else:
+                    payload = {
+                        "status": "pending",
+                        "progress": 0,
+                        "current": 0,
+                        "total": 0,
+                        "message": "等待翻译任务启动",
+                        "error": "",
+                    }
+
+            payload_text = json.dumps(payload, ensure_ascii=False)
+            if payload_text != last_payload:
+                yield f"data: {payload_text}\n\n"
+                last_payload = payload_text
+
+            if payload.get("status") in {"completed", "failed", "error"}:
+                break
+
+            idle_rounds += 1
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ===== 论文精读对话 API =====
+
+class ChatMessageRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=10000)
+
+
+@app.post("/api/papers/{doi}/chat")
+def api_chat_with_paper(doi: str, body: ChatMessageRequest):
+    """发送消息，SSE 流式返回"""
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="消息不能为空")
+
+    rows = execute_query(
+        "SELECT DOI, Title, TitleCN, Abstract, AbstractCN, Stars, RelevanceReason, markdown_content "
+        "FROM papers_relevant WHERE DOI = %s",
+        (doi,)
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="论文不存在")
+
+    paper_context = rows[0]
+    chat_svc = ChatService(config=get_config("llm_filter"))
+    return StreamingResponse(
+        chat_svc.send_message_stream(doi, message, paper_context),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
+
+
+@app.get("/api/papers/{doi}/chat/history")
+async def api_get_chat_history(doi: str):
+    """获取对话历史"""
+    try:
+        chat_svc = ChatService(config=get_config("llm_filter"))
+        messages = chat_svc.get_chat_history(doi)
+        return {"success": True, "data": messages}
+    except Exception as e:
+        logger.error(f"获取对话历史失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/papers/{doi}/chat")
+async def api_clear_chat_history(doi: str):
+    """清空对话历史"""
+    try:
+        chat_svc = ChatService(config=get_config("llm_filter"))
+        chat_svc.clear_chat_history(doi)
+        return {"success": True, "message": "对话已清空"}
+    except Exception as e:
+        logger.error(f"清空对话失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/papers/{doi}/chat/suggestions")
+async def api_get_chat_suggestions(doi: str):
+    """获取推荐问题"""
+    try:
+        rows = execute_query(
+            "SELECT Title, TitleCN, Abstract, AbstractCN, Stars, RelevanceReason FROM papers_relevant WHERE DOI = %s",
+            (doi,)
+        )
+        paper_data = rows[0] if rows else {}
+        suggestions = ChatService.get_suggestions(paper_data)
+        return {"success": True, "data": suggestions}
+    except Exception as e:
+        logger.error(f"获取推荐问题失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- 队列接口 ---
 @app.get("/api/queue/status")
 async def get_queue_status():
@@ -1745,13 +2442,20 @@ async def serve_index():
 
 @app.get("/{path:path}")
 async def serve_static(path: str):
-    """服务其他静态文件"""
+    """服务其他静态文件（Vite构建输出 + SPA路由兜底）"""
     # 先尝试直接找文件
     file_path = os.path.join(STATIC_DIR, path)
     if os.path.exists(file_path) and os.path.isfile(file_path):
         return FileResponse(file_path)
 
-    # 对于SPA路由，返回index.html
+    # 已知的静态资源扩展名才视为文件请求，找不到则404
+    static_extensions = {'.js', '.css', '.map', '.png', '.jpg', '.jpeg', '.gif',
+                         '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.webp'}
+    ext = os.path.splitext(path)[1].lower()
+    if ext in static_extensions:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # 其余路径（SPA路由、DOI 含点的路径）都返回 index.html
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
