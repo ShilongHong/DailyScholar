@@ -169,19 +169,22 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
-                <input type="text" v-model="wizardData.db.user" placeholder="数据库用户名"
+                <input type="text" v-model="wizardData.db.user" placeholder="例如: root"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
-                <input type="password" v-model="wizardData.db.password" placeholder="数据库密码"
+                <input type="password" v-model="wizardData.db.password" placeholder="例如: your-password"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
               </div>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">数据库名称</label>
-              <input type="text" v-model="wizardData.db.database" placeholder="例如: dailypaper"
+              <input type="text" v-model="wizardData.db.database" placeholder="例如: dailyscholar"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+            </div>
+            <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+              示例填写：主机填 localhost，端口填 3306，用户名常见为 root，数据库名可用 dailyscholar。
             </div>
           </div>
 
@@ -233,7 +236,7 @@
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-              <input type="password" v-model="wizardData.llm.api_key" placeholder="sk-..."
+              <input type="password" v-model="wizardData.llm.api_key" placeholder="例如: sk-xxxxxxxxxxxxxxxx"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
               <p class="mt-1 text-xs text-gray-400">支持 OpenAI 兼容的 API（如 OpenAI、DeepSeek、SiliconFlow 等）</p>
             </div>
@@ -244,8 +247,11 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
-              <input type="text" v-model="wizardData.llm.model" placeholder="例如: gpt-4o-mini, deepseek-chat"
+              <input type="text" v-model="wizardData.llm.model" placeholder="例如: gpt-4o-mini 或 deepseek-chat"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+            </div>
+            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-700">
+              示例填写：OpenAI 可用 https://api.openai.com/v1 + gpt-4o-mini，DeepSeek 可用 https://api.deepseek.com/v1 + deepseek-chat。
             </div>
           </div>
 
@@ -292,14 +298,14 @@
                 <span v-else>AI 生成</span>
               </button>
             </div>
-            <p class="text-xs text-gray-500 mt-2">AI 将根据您的描述生成详细的研究方向说明和推荐关键词</p>
+            <p class="text-xs text-gray-500 mt-2">示例：我的研究方向是多模态大模型在医疗影像中的应用。AI 会据此生成详细描述和推荐关键词。</p>
           </div>
 
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1">研究方向详细描述</label>
             <textarea v-model="wizardData.research" rows="8"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
-              placeholder="详细描述您的研究方向，或使用 AI 生成..."></textarea>
+              placeholder="示例：&#10;1. 我关注多模态大模型、医学影像分析与报告生成。&#10;2. 重点跟踪视觉语言模型、检索增强与可靠性评估。&#10;3. 更关注可迁移方法，而不是只在单一数据集刷榜。"></textarea>
             <p class="text-xs text-gray-500 mt-1">描述越具体，AI 筛选越准确</p>
           </div>
 
@@ -332,7 +338,7 @@
                   </div>
                   <textarea v-model="editableGeneratedConfig.anchors.high" rows="4"
                     class="w-full px-3 py-2 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500/30 focus:border-green-400 text-sm"
-                    placeholder="每行一个高分关键词"></textarea>
+                    placeholder="每行一个高分关键词，例如：&#10;multimodal medical imaging&#10;vision language model&#10;radiology report generation"></textarea>
                   <p class="text-xs text-gray-500 mt-1">每行一个关键词，匹配这些内容的论文会获得更高分。</p>
                 </div>
 
@@ -343,7 +349,7 @@
                   </div>
                   <textarea v-model="editableGeneratedConfig.anchors.medium" rows="3"
                     class="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400 text-sm"
-                    placeholder="每行一个中等分数信号"></textarea>
+                    placeholder="每行一个中等分数信号，例如：&#10;retrieval augmented generation&#10;weakly supervised learning&#10;clinical benchmark"></textarea>
                 </div>
 
                 <div class="bg-white rounded-lg p-4 border border-purple-100">
@@ -353,7 +359,7 @@
                   </div>
                   <textarea v-model="editableGeneratedConfig.anchors.low" rows="3"
                     class="w-full px-3 py-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500/30 focus:border-red-400 text-sm"
-                    placeholder="每行一个低分或排除关键词"></textarea>
+                    placeholder="每行一个低分或排除关键词，例如：&#10;general social media analysis&#10;recommendation system&#10;non-medical sentiment analysis"></textarea>
                 </div>
               </div>
             </div>
@@ -373,11 +379,11 @@
                       class="w-20 px-2 py-1 text-xs border border-green-200 rounded bg-green-50 text-green-700">
                   </div>
                   <input type="text" v-model="editableGeneratedConfig.examples.high.title"
-                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="高分示例标题">
+                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="例如：A Vision-Language Model for Radiology Report Generation">
                   <textarea v-model="editableGeneratedConfig.examples.high.abstract" rows="3"
-                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="高分示例摘要"></textarea>
+                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="示例摘要：提出面向胸片报告生成的视觉语言模型，并评估其临床可用性。"></textarea>
                   <textarea v-model="editableGeneratedConfig.examples.high.reason" rows="2"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="高分原因"></textarea>
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="示例原因：任务、方法和评估目标都与研究方向高度一致。"></textarea>
                 </div>
 
                 <div class="bg-white rounded-lg p-4 border border-blue-100" v-if="aiGeneratedLlmConfig.few_shot_examples?.medium_score">
@@ -388,11 +394,11 @@
                       class="w-20 px-2 py-1 text-xs border border-amber-200 rounded bg-amber-50 text-amber-700">
                   </div>
                   <input type="text" v-model="editableGeneratedConfig.examples.medium.title"
-                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="中等分示例标题">
+                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="例如：Retrieval-Augmented Clinical QA with Lightweight Adaptation">
                   <textarea v-model="editableGeneratedConfig.examples.medium.abstract" rows="3"
-                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="中等分示例摘要"></textarea>
+                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="示例摘要：结合检索增强与轻量适配提升临床问答效果，但与核心任务并非完全重合。"></textarea>
                   <textarea v-model="editableGeneratedConfig.examples.medium.reason" rows="2"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="中等分原因"></textarea>
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="示例原因：方法相关但研究问题不是当前最核心关注点。"></textarea>
                 </div>
 
                 <div class="bg-white rounded-lg p-4 border border-blue-100" v-if="aiGeneratedLlmConfig.few_shot_examples?.low_score">
@@ -403,11 +409,11 @@
                       class="w-20 px-2 py-1 text-xs border border-red-200 rounded bg-red-50 text-red-700">
                   </div>
                   <input type="text" v-model="editableGeneratedConfig.examples.low.title"
-                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="低分示例标题">
+                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="例如：Sentiment Analysis for Social Media Posts">
                   <textarea v-model="editableGeneratedConfig.examples.low.abstract" rows="3"
-                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="低分示例摘要"></textarea>
+                    class="w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm" placeholder="示例摘要：研究社交媒体文本情感分类，与当前研究主题关联较弱。"></textarea>
                   <textarea v-model="editableGeneratedConfig.examples.low.reason" rows="2"
-                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="低分原因"></textarea>
+                    class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="示例原因：场景和技术路线都偏离当前研究重点。"></textarea>
                 </div>
               </div>
 
@@ -460,12 +466,13 @@
 
           <!-- 自定义关键词输入 -->
           <div class="flex gap-2 mb-6">
-            <input type="text" v-model="wizardNewKeyword" @keyup.enter="addArxivKeyword()" placeholder="输入自定义关键词，按回车添加"
+            <input type="text" v-model="wizardNewKeyword" @keyup.enter="addArxivKeyword()" placeholder="例如: cs.CL、cat:cs.AI、large language model"
               class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
             <button @click="addArxivKeyword()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
               <i class="ph ph-plus"></i> 添加
             </button>
           </div>
+          <p class="mb-6 text-xs text-gray-500">示例填写：既可以填 ArXiv 分类如 cs.CL、cs.AI，也可以填 cat:cs.LG 或 large language model 这类检索关键词。</p>
 
           <!-- 每个关键词最大结果数 -->
           <div>
@@ -514,8 +521,9 @@
                   <span v-if="field.required" class="text-red-500">*</span>
                 </label>
                 <input :type="field.type || 'text'" v-model="wizardData.notify.config[field.key]"
-                  :placeholder="field.required ? '必填' : '选填'"
+                  :placeholder="field.placeholder || (field.required ? '必填' : '选填')"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+                <p v-if="field.help" class="mt-1 text-xs text-gray-500">{{ field.help }}</p>
               </div>
             </div>
           </div>
@@ -715,7 +723,7 @@
             class="px-4 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors">
             跳过
           </button>
-          <button @click="nextWizardStep"
+          <button @click="handleNextWizardStep"
             :class="['px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm',
               wizardStep === 7
                 ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/30'
@@ -732,6 +740,8 @@
 
 <script setup>
 import { useWizard } from '@/composables/useWizard'
+
+const emit = defineEmits(['close'])
 
 const {
   // 向导显示状态（由 composable 统一管理）
@@ -777,4 +787,11 @@ const {
   openWizard,
   reopenWizard
 } = useWizard()
+
+const handleNextWizardStep = async () => {
+  const completed = await nextWizardStep()
+  if (completed) {
+    emit('close')
+  }
+}
 </script>

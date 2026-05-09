@@ -1,11 +1,6 @@
 # Sisyphus (plan files, notepads, evidence - development only)
 .sisyphus/
 
-# Test files
-tests/
-test_*.py
-*_test.py
-
 # Python
 __pycache__/
 *.py[cod]
@@ -34,7 +29,7 @@ ENV/
 env/
 
 # Test
-test/
+tests/
 
 # Environment
 .env
@@ -67,6 +62,14 @@ config.py
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+.vite/
+frontend/.vite/
+
+# Coverage
+.coverage
+.coverage.*
+coverage/
+htmlcov/
 
 # IDE
 .vscode/
@@ -92,5 +95,9 @@ node_modules/
 *.sql
 *.sqlite
 *.db
+
+# Local process files
+*.pid
+*.pid.lock
 
 

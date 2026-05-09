@@ -121,10 +121,10 @@ CHANNEL_REGISTRY: dict[str, dict[str, object]] = {
     },
     "dingtalk_webhook": {
         "display_name": "钉钉Webhook机器人",
-        "required_keys": ["DD_BOT_TOKEN", "DD_BOT_SECRET"],
+        "required_keys": ["DD_BOT_TOKEN"],
         "send_mode": "direct",
         "supports_markdown": False,
-        "optional_keys": ["HITOKOTO"],
+        "optional_keys": ["DD_BOT_SECRET", "HITOKOTO"],
         "field_mapping": NOTIFY_CHANNEL_ENV_MAPPING["dingtalk_webhook"],
         "field_defaults": {"HITOKOTO": False},
     },
@@ -483,7 +483,7 @@ class NotifyService:
     def send_papers_with_result(
         self, papers: list[dict[str, object]]
     ) -> dict[str, object]:
-        from config import MESSAGE_CONFIG
+        from config_loader import MESSAGE_CONFIG
         import time
         import sys
 

@@ -43,18 +43,20 @@
           <div class="grid grid-cols-1 gap-6">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-              <input type="password" v-model="configData.llm_filter.api_key"
+              <input type="password" v-model="configData.llm_filter.api_key" placeholder="例如: sk-xxxxxxxxxxxxxxxx"
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+              <p class="mt-1 text-xs text-gray-500">示例：填写 OpenAI、DeepSeek、SiliconFlow 等兼容服务提供的 API Key。</p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
-              <input type="text" v-model="configData.llm_filter.base_url"
+              <input type="text" v-model="configData.llm_filter.base_url" placeholder="例如: https://api.openai.com/v1"
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
+              <p class="mt-1 text-xs text-gray-500">示例：OpenAI 用 https://api.openai.com/v1，DeepSeek 用 https://api.deepseek.com/v1。</p>
             </div>
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
-                <input type="text" v-model="configData.llm_filter.model"
+                <input type="text" v-model="configData.llm_filter.model" placeholder="例如: gpt-4o-mini 或 deepseek-chat"
                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
               </div>
               <div>
@@ -80,7 +82,7 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Max Tokens</label>
-              <input type="number" min="256" max="8192" v-model="configData.llm_filter.max_tokens"
+              <input type="number" min="256" max="8192" v-model="configData.llm_filter.max_tokens" placeholder="例如: 2048"
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
             </div>
 
@@ -123,7 +125,7 @@
           <div>
             <textarea v-model="configData.research_description" rows="12"
               class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50 font-mono text-sm"
-              placeholder="描述你的研究方向..."></textarea>
+              placeholder="示例：&#10;1. 我关注多模态大模型、医学影像分析与报告生成。&#10;2. 重点跟踪视觉语言模型、检索增强、可靠性评估。&#10;3. 更关心可迁移方法，而不是单数据集刷榜。"></textarea>
             <p class="mt-2 text-xs text-gray-500">提示：可以列出关键词、研究主题、技术方向、关注的问题等，越详细评分越精准。</p>
           </div>
 
@@ -137,7 +139,7 @@
             </div>
             <p class="text-sm text-gray-600 mb-3">基于您的研究方向，AI 可以自动生成评分锚点关键词和评分示例，提高筛选精准度。</p>
             <div class="flex gap-3">
-              <input v-model="researchBrief" type="text" placeholder="一句话描述研究方向（用于AI生成）"
+              <input v-model="researchBrief" type="text" placeholder="例如：我的研究方向是多模态大模型在医疗影像中的应用"
                 class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring focus:ring-purple-500/50 text-sm">
               <button @click="generateResearch" :disabled="generatingResearch || !researchBrief"
                 class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
@@ -176,7 +178,7 @@
               </label>
               <textarea v-model="configData.scoring_anchors_medium" rows="3"
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50 text-sm font-mono"
-                placeholder="每行一个关键词..."></textarea>
+                placeholder="每行一个关键词，例如：&#10;retrieval augmented generation&#10;weakly supervised learning&#10;clinical benchmark"></textarea>
             </div>
 
             <!-- 低分/排除关键词 -->
@@ -219,7 +221,7 @@
                 </label>
                 <textarea v-model="configData.few_shot_medium" rows="6"
                   class="w-full rounded-lg border-yellow-300 shadow-sm focus:border-yellow-500 focus:ring focus:ring-yellow-500/50 text-sm font-mono"
-                  placeholder="示例格式同上..."></textarea>
+                  placeholder="示例格式：&#10;标题：Retrieval-Augmented Clinical QA with Lightweight Adaptation&#10;摘要：方法相关，但与核心任务并非完全重合...&#10;&#10;评分理由：技术路线可借鉴，但研究问题不是当前重点。"></textarea>
               </div>
 
               <!-- 低分示例 -->
@@ -229,7 +231,7 @@
                 </label>
                 <textarea v-model="configData.few_shot_low" rows="6"
                   class="w-full rounded-lg border-red-300 shadow-sm focus:border-red-500 focus:ring focus:ring-red-500/50 text-sm font-mono"
-                  placeholder="示例格式同上..."></textarea>
+                  placeholder="示例格式：&#10;标题：Sentiment Analysis for Social Media Posts&#10;摘要：研究社交媒体文本情感分类...&#10;&#10;评分理由：场景与技术路线都偏离当前研究重点。"></textarea>
               </div>
             </div>
           </div>
@@ -248,7 +250,8 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">搜索关键词/分类 (每行一个)</label>
             <textarea v-model="configData.arxiv.keywords_str" rows="6"
-              class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50 font-mono text-sm"></textarea>
+              class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50 font-mono text-sm"
+              placeholder="例如：&#10;cs.CL&#10;cat:cs.AI&#10;large language model&#10;multimodal retrieval"></textarea>
             <p class="mt-1 text-xs text-gray-500">例如: cs.CL, cs.CV, cat:cs.AI</p>
           </div>
           <div class="grid grid-cols-2 gap-4">
@@ -362,7 +365,18 @@
 
         <!-- ==================== Tab 6: MinerU 转换 ==================== -->
         <div v-if="activeTab === 'mineru' && configData.mineru_config" class="space-y-6">
-          <h3 class="text-lg font-medium text-gray-900">MinerU 转换设置</h3>
+          <div class="flex items-center gap-3">
+            <h3 class="text-lg font-medium text-gray-900">MinerU 转换设置</h3>
+            <a
+              href="https://mineru.net/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 text-sm font-medium text-primary transition hover:text-primary/80 hover:underline"
+            >
+              访问官网
+              <i class="ph ph-arrow-square-out text-base"></i>
+            </a>
+          </div>
           <p class="text-sm text-gray-500">配置 MinerU PDF 转 Markdown 的转换方式，支持云端 API 和本地部署两种模式。</p>
 
           <!-- Mode selector -->

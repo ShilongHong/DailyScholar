@@ -10,6 +10,7 @@ import json
 import logging
 import threading
 import time
+from copy import deepcopy
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, cast
@@ -40,13 +41,15 @@ except ImportError:
 # 确保服务模块可以导入
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import (
+from config_loader import (
     ARXIV_CONFIG,
     LLM_FILTER_CONFIG,
     SCHEDULE_CONFIG,
     DINGTALK_CONFIG,
+    MINERU_CONFIG,
     LOGGING_CONFIG,
     OUTPUT_CONFIG,
+    RESEARCH_DESCRIPTION,
 )
 from services import (
     ArxivService,
@@ -71,6 +74,7 @@ from services import (
     get_all_configs_from_db,
     execute_query,
     execute_update,
+    close_mysql_connection,
 )
 from services.mysql_service import _ensure_tables_exist
 from services.notify_service import (
@@ -159,6 +163,65 @@ def _build_bilingual_markdown_from_alignment(
 # ============================================================
 RUNTIME_CONFIG_FILE = "runtime_config.json"
 SETUP_COMPLETE_KEY = "setup_complete"
+MASKED_SECRET_VALUE = "***"
+
+
+def _deep_merge_dict(base: object, override: object) -> object:
+    if isinstance(base, dict) and isinstance(override, dict):
+        merged: dict[str, object] = deepcopy(cast(dict[str, object], base))
+        for key, value in cast(dict[str, object], override).items():
+            merged[key] = _deep_merge_dict(merged.get(key), value)
+        return merged
+    return deepcopy(override)
+
+
+def _normalize_runtime_config(runtime: object) -> dict[str, Any]:
+    if not isinstance(runtime, dict):
+        return {}
+
+    normalized = deepcopy(cast(dict[str, Any], runtime))
+    arxiv_section = normalized.get("arxiv")
+    if not isinstance(arxiv_section, dict):
+        arxiv_section = {}
+
+    legacy_mysql = normalized.pop("mysql", None)
+    if isinstance(legacy_mysql, dict):
+        current_mysql = arxiv_section.get("mysql")
+        arxiv_section["mysql"] = _deep_merge_dict(
+            legacy_mysql,
+            current_mysql if isinstance(current_mysql, dict) else {},
+        )
+        normalized["arxiv"] = arxiv_section
+
+    return normalized
+
+
+def _is_sensitive_key(key: str) -> bool:
+    key_name = key.lower()
+    return key_name in {"secret", "password", "pwd"} or key_name.endswith(
+        ("_key", "_token", "_secret")
+    )
+
+
+def _merge_preserving_masked_secrets(
+    existing: object, incoming: object, key: str = ""
+) -> object:
+    if isinstance(existing, dict) and isinstance(incoming, dict):
+        merged = deepcopy(cast(dict[str, object], existing))
+        for child_key, child_value in cast(dict[str, object], incoming).items():
+            merged[child_key] = _merge_preserving_masked_secrets(
+                merged.get(child_key), child_value, str(child_key)
+            )
+        return merged
+
+    if (
+        _is_sensitive_key(key)
+        and isinstance(incoming, str)
+        and incoming == MASKED_SECRET_VALUE
+    ):
+        return deepcopy(existing) if existing is not None else ""
+
+    return deepcopy(incoming)
 
 
 def load_runtime_config() -> dict[str, Any]:
@@ -167,7 +230,7 @@ def load_runtime_config() -> dict[str, Any]:
     try:
         configs = get_all_configs_from_db()
         if configs:
-            return configs
+            return _normalize_runtime_config(configs)
     except Exception as e:
         logger.warning(f"从数据库加载配置失败: {e}")
 
@@ -179,7 +242,7 @@ def load_runtime_config() -> dict[str, Any]:
                 # 迁移到数据库
                 for name, value in configs.items():
                     save_config_to_db(name, value)
-                return configs
+                return _normalize_runtime_config(configs)
         except Exception as e:
             logger.warning(f"从文件加载配置失败: {e}")
 
@@ -188,16 +251,22 @@ def load_runtime_config() -> dict[str, Any]:
 
 def save_runtime_config(config: dict[str, Any]):
     """保存运行时配置（同时保存到数据库和文件）"""
+    existing_config = load_runtime_config()
+    merged_config = cast(
+        dict[str, Any],
+        _normalize_runtime_config(_deep_merge_dict(existing_config, config)),
+    )
+
     # 保存到数据库（主要存储）
     success = True
-    for name, value in config.items():
+    for name, value in merged_config.items():
         if not save_config_to_db(name, value):
             success = False
 
     # 同时保存到文件（备份）
     try:
         with open(RUNTIME_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+            json.dump(merged_config, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"保存配置文件失败: {e}")
 
@@ -217,10 +286,8 @@ def mask_sensitive_fields(config: object) -> object:
             key_name = safe_key.lower()
             if key_name == "keywords":
                 safe_config[safe_key] = mask_sensitive_fields(value)
-            elif key_name in {"secret", "password", "pwd"} or key_name.endswith(
-                ("_key", "_token", "_secret")
-            ):
-                safe_config[safe_key] = "***"
+            elif _is_sensitive_key(safe_key):
+                safe_config[safe_key] = "***" if _is_non_empty_string(value) else value
             else:
                 safe_config[safe_key] = mask_sensitive_fields(value)
         return safe_config
@@ -244,17 +311,25 @@ def get_config(name: str) -> dict[str, Any]:
     """获取配置（运行时配置优先）"""
     runtime = load_runtime_config()
 
+    if name == "mysql":
+        arxiv_config = get_config("arxiv")
+        mysql_config = arxiv_config.get("mysql", {})
+        return cast(
+            dict[str, Any], mysql_config if isinstance(mysql_config, dict) else {}
+        )
+
     config_map: dict[str, dict[str, Any]] = {
         "arxiv": ARXIV_CONFIG,
         "llm_filter": LLM_FILTER_CONFIG,
         "schedule": SCHEDULE_CONFIG,
         "dingtalk": DINGTALK_CONFIG,
+        "mineru_config": MINERU_CONFIG,
         "notify": DEFAULT_NOTIFY_CONFIG,
     }
 
-    base_config = config_map.get(name, {}).copy()
+    base_config = deepcopy(config_map.get(name, {}))
     if name in runtime:
-        base_config.update(runtime[name])
+        base_config = cast(dict[str, Any], _deep_merge_dict(base_config, runtime[name]))
 
     return base_config
 
@@ -693,6 +768,11 @@ def _validate_test_notify_config(channel: str, config: object) -> dict[str, Any]
                 "通道 wxpusher 需要至少配置 WXPUSHER_TOPIC_IDS 或 WXPUSHER_UIDS"
             )
 
+    if channel == "dingtalk_webhook":
+        token = config.get("DD_BOT_TOKEN")
+        if not isinstance(token, str) or not token.strip():
+            raise ValueError("通道 dingtalk_webhook 的字段 DD_BOT_TOKEN 不能为空")
+
     return config
 
 
@@ -726,7 +806,7 @@ def _test_db_sync(
 
         tables_created = False
         if create_tables:
-            mysql_config = cast(dict[str, Any], ARXIV_CONFIG.get("mysql", {}) or {})
+            mysql_config = get_config("mysql")
             tables_created = _ensure_tables_exist(
                 connection,
                 {
@@ -1191,9 +1271,7 @@ async def delete_paper_endpoint(doi: str):
 async def retranslate_paper_endpoint(doi: str):
     """重新翻译论文"""
     try:
-        from config import ARXIV_CONFIG
-
-        mysql_config = cast(dict[str, Any], ARXIV_CONFIG.get("mysql", {}) or {})
+        mysql_config = get_config("mysql")
         table = mysql_config.get("table_relevant", "papers_relevant")
 
         # 获取论文信息
@@ -1914,7 +1992,7 @@ async def get_setup_status():
 async def get_existing_config():
     runtime = cast(dict[str, Any], load_runtime_config() or {})
 
-    arxiv_config = _get_runtime_section(runtime, "arxiv")
+    arxiv_config = get_config("arxiv")
     llm_config = _get_runtime_section(runtime, "llm_filter")
     notify_config = _get_runtime_section(runtime, "notify")
     mysql_config = _get_runtime_section(arxiv_config, "mysql")
@@ -1924,13 +2002,18 @@ async def get_existing_config():
     notify_safe = mask_sensitive_fields(notify_config)
     arxiv_safe = mask_sensitive_fields(arxiv_config)
 
+    mysql_type = str(mysql_config.get("db_type", "sqlite")) if mysql_config else ""
     has_mysql = bool(
         mysql_config
         and mysql_config.get("enable", True) is True
-        and _is_non_empty_string(mysql_config.get("host"))
-        and _is_non_empty_string(mysql_config.get("database"))
-        and _is_non_empty_string(mysql_config.get("user"))
-        and _is_non_empty_string(mysql_config.get("password"))
+        and (
+            mysql_type == "sqlite"
+            or (
+                _is_non_empty_string(mysql_config.get("host"))
+                and _is_non_empty_string(mysql_config.get("database"))
+                and _is_non_empty_string(mysql_config.get("user"))
+            )
+        )
     )
 
     has_llm = bool(
@@ -1982,6 +2065,12 @@ async def get_existing_config():
                 "user": mysql_safe.get("user", "")
                 if isinstance(mysql_safe, dict)
                 else "",
+                "db_type": mysql_safe.get("db_type", "sqlite")
+                if isinstance(mysql_safe, dict)
+                else "sqlite",
+                "sqlite_path": mysql_safe.get("sqlite_path", "data/papers.db")
+                if isinstance(mysql_safe, dict)
+                else "data/papers.db",
             },
             "llm": {
                 "base_url": llm_safe.get("base_url", "")
@@ -2030,7 +2119,6 @@ async def reset_setup():
 @app.get("/api/config/all")
 async def get_all_config():
     """获取所有配置"""
-    from config import RESEARCH_DESCRIPTION
     from services.prompt_service import DEFAULT_PROMPT_CONFIG
 
     # 从数据库加载研究方向（如果有）
@@ -2041,8 +2129,13 @@ async def get_all_config():
 
     llm_raw = cast(dict[str, object], get_config("llm_filter") or {})
     notify_raw = cast(dict[str, object], get_config("notify") or {})
+    arxiv_raw = cast(dict[str, object], get_config("arxiv") or {})
+    mineru_raw = cast(dict[str, object], get_config("mineru_config") or {})
     llm_config = mask_sensitive_fields(llm_raw)
     notify_config = mask_sensitive_fields(notify_raw)
+    arxiv_config = mask_sensitive_fields(arxiv_raw)
+    mineru_config = mask_sensitive_fields(mineru_raw)
+    mysql_config = mask_sensitive_fields(get_config("mysql"))
 
     # 加载 prompt_config
     try:
@@ -2057,10 +2150,12 @@ async def get_all_config():
     return {
         "success": True,
         "data": {
-            "arxiv": get_config("arxiv"),
+            "arxiv": arxiv_config,
+            "mysql": mysql_config,
             "llm_filter": llm_config,
             "schedule": get_config("schedule"),
             "notify": notify_config,
+            "mineru_config": mineru_config,
             "research_description": research_description,
             "prompt_config": full_prompt_config,
             "dingtalk": {
@@ -2085,8 +2180,18 @@ async def update_config(name: str, update: ConfigUpdate):
         # 特殊处理研究方向（字符串而非字典）
         if name == "research_description":
             runtime["research_description"] = update.config.get("content", "")
+        elif name == "mysql":
+            arxiv_runtime = _get_runtime_section(runtime, "arxiv")
+            existing_mysql = _get_runtime_section(arxiv_runtime, "mysql")
+            arxiv_runtime["mysql"] = _merge_preserving_masked_secrets(
+                existing_mysql, update.config
+            )
+            runtime["arxiv"] = arxiv_runtime
         else:
-            runtime[name] = update.config
+            existing_section = runtime.get(name, {})
+            runtime[name] = _merge_preserving_masked_secrets(
+                existing_section, update.config
+            )
 
         save_runtime_config(runtime)
 
@@ -2098,6 +2203,9 @@ async def update_config(name: str, update: ConfigUpdate):
                 )
 
         # 重新加载调度器
+        if name in {"arxiv", "mysql"}:
+            close_mysql_connection()
+
         if name == "schedule":
             scheduler.reload()
 

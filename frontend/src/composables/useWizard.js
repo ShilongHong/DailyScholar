@@ -77,41 +77,173 @@ export function useWizard() {
 
   const notifyChannelFields = {
     bark: [
-      { key: 'BARK_PUSH', label: 'BARK_PUSH', required: true },
-      { key: 'BARK_ARCHIVE', label: 'BARK_ARCHIVE' },
-      { key: 'BARK_GROUP', label: 'BARK_GROUP' },
-      { key: 'BARK_SOUND', label: 'BARK_SOUND' },
-      { key: 'BARK_ICON', label: 'BARK_ICON' }
+      {
+        key: 'BARK_PUSH',
+        label: 'BARK_PUSH',
+        required: true,
+        placeholder: '例如: https://api.day.app/DxHcxxxxxRxxxxxxcm/',
+        help: '可填写完整 Bark 推送地址，也可只填写设备码。'
+      },
+      {
+        key: 'BARK_ARCHIVE',
+        label: 'BARK_ARCHIVE',
+        placeholder: '例如: 1',
+        help: '填 1 表示推送后存档，不填则使用 Bark 默认行为。'
+      },
+      {
+        key: 'BARK_GROUP',
+        label: 'BARK_GROUP',
+        placeholder: '例如: DailyScholar',
+        help: '可选，用于在 Bark 中给消息分组。'
+      },
+      {
+        key: 'BARK_SOUND',
+        label: 'BARK_SOUND',
+        placeholder: '例如: bell',
+        help: '可选，填写 Bark 支持的铃声名称。'
+      },
+      {
+        key: 'BARK_ICON',
+        label: 'BARK_ICON',
+        placeholder: '例如: https://example.com/icon.png',
+        help: '可选，填写通知图标的公开图片地址。'
+      }
     ],
     dingtalk_app: [
-      { key: 'app_key', label: 'App Key', required: true },
-      { key: 'app_secret', label: 'App Secret', type: 'password', required: true },
-      { key: 'robot_code', label: 'Robot Code', required: true },
-      { key: 'open_conversation_id', label: 'Open Conversation ID', required: true }
+      {
+        key: 'app_key',
+        label: 'App Key',
+        required: true,
+        placeholder: '例如: dingxxxxxxxxxxxxxxxx',
+        help: '从钉钉开放平台应用凭证中复制。'
+      },
+      {
+        key: 'app_secret',
+        label: 'App Secret',
+        type: 'password',
+        required: true,
+        placeholder: '填写钉钉应用 App Secret',
+        help: '与 App Key 配套的应用密钥。'
+      },
+      {
+        key: 'robot_code',
+        label: 'Robot Code',
+        required: true,
+        placeholder: '例如: dingxxxxxxxxxxxxxxxx',
+        help: '钉钉群机器人编码，可在机器人配置页复制。'
+      },
+      {
+        key: 'open_conversation_id',
+        label: 'Open Conversation ID',
+        required: true,
+        placeholder: '例如: cidxxxxxxxxxxxxxxxx',
+        help: '目标会话 ID，通常以 cid 开头。'
+      }
     ],
     dingtalk_webhook: [
-      { key: 'DD_BOT_TOKEN', label: 'DD_BOT_TOKEN', required: true },
-      { key: 'DD_BOT_SECRET', label: 'DD_BOT_SECRET' }
+      {
+        key: 'DD_BOT_TOKEN',
+        label: 'DD_BOT_TOKEN',
+        required: true,
+        placeholder: '填写 Webhook 地址里 access_token= 后的值',
+        help: '不要填写整段 Webhook 地址，只填 access_token。'
+      },
+      {
+        key: 'DD_BOT_SECRET',
+        label: 'DD_BOT_SECRET',
+        required: false,
+        placeholder: '例如: SECxxxxxxxxxxxxxxxx',
+        help: '选填。若机器人开启加签校验，这里填写签名密钥；未开启则可留空。'
+      }
     ],
     feishu: [
-      { key: 'FSKEY', label: 'FSKEY', required: true },
-      { key: 'FSSECRET', label: 'FSSECRET' }
+      {
+        key: 'FSKEY',
+        label: 'FSKEY',
+        required: true,
+        placeholder: '填写飞书 Webhook 地址最后一段',
+        help: '例如 open-apis/bot/v2/hook/ 后面的那段字符串。'
+      },
+      {
+        key: 'FSSECRET',
+        label: 'FSSECRET',
+        placeholder: '例如: xxxx（启用签名校验时填写）',
+        help: '可选，对应飞书机器人安全设置里的签名校验密钥。'
+      }
     ],
     telegram: [
-      { key: 'TG_BOT_TOKEN', label: 'TG_BOT_TOKEN', required: true },
-      { key: 'TG_USER_ID', label: 'TG_USER_ID', required: true },
-      { key: 'TG_API_HOST', label: 'TG_API_HOST' }
+      {
+        key: 'TG_BOT_TOKEN',
+        label: 'TG_BOT_TOKEN',
+        required: true,
+        placeholder: '例如: 1407203283:AAG9rt-6RDaaX0HBLZQq0laNOh898iFYaRQ',
+        help: 'BotFather 创建机器人后可获得该 token。'
+      },
+      {
+        key: 'TG_USER_ID',
+        label: 'TG_USER_ID',
+        required: true,
+        placeholder: '例如: 1434078534',
+        help: '填写个人或群组 chat id。'
+      },
+      {
+        key: 'TG_API_HOST',
+        label: 'TG_API_HOST',
+        placeholder: '例如: https://api.telegram.org',
+        help: '可选，若使用代理网关可替换成兼容的 Telegram API 地址。'
+      }
     ],
     smtp: [
-      { key: 'SMTP_SERVER', label: 'SMTP_SERVER', required: true },
-      { key: 'SMTP_EMAIL', label: 'SMTP_EMAIL', required: true },
-      { key: 'SMTP_PASSWORD', label: 'SMTP_PASSWORD', type: 'password', required: true },
-      { key: 'SMTP_NAME', label: 'SMTP_NAME', required: true }
+      {
+        key: 'SMTP_SERVER',
+        label: 'SMTP_SERVER',
+        required: true,
+        placeholder: '例如: smtp.exmail.qq.com:465',
+        help: '填写邮件服务商提供的 SMTP 地址和端口。'
+      },
+      {
+        key: 'SMTP_EMAIL',
+        label: 'SMTP_EMAIL',
+        required: true,
+        placeholder: '例如: your-name@example.com',
+        help: '通知将默认由该邮箱发给自己。'
+      },
+      {
+        key: 'SMTP_PASSWORD',
+        label: 'SMTP_PASSWORD',
+        type: 'password',
+        required: true,
+        placeholder: '填写邮箱密码或授权码',
+        help: '很多邮箱服务商要求填写授权码，而不是登录密码。'
+      },
+      {
+        key: 'SMTP_NAME',
+        label: 'SMTP_NAME',
+        required: true,
+        placeholder: '例如: DailyScholar Bot',
+        help: '显示为发件人名称，可自定义。'
+      }
     ],
     wxpusher: [
-      { key: 'WXPUSHER_APP_TOKEN', label: 'WXPUSHER_APP_TOKEN', required: true },
-      { key: 'WXPUSHER_TOPIC_IDS', label: 'WXPUSHER_TOPIC_IDS' },
-      { key: 'WXPUSHER_UIDS', label: 'WXPUSHER_UIDS' }
+      {
+        key: 'WXPUSHER_APP_TOKEN',
+        label: 'WXPUSHER_APP_TOKEN',
+        required: true,
+        placeholder: '例如: AT_xxxxxxxxxxxxxxxxxxxx',
+        help: '从 WxPusher 管理后台复制 appToken。'
+      },
+      {
+        key: 'WXPUSHER_TOPIC_IDS',
+        label: 'WXPUSHER_TOPIC_IDS',
+        placeholder: '例如: 12345;67890',
+        help: '可选，多个主题 ID 用英文分号分隔。'
+      },
+      {
+        key: 'WXPUSHER_UIDS',
+        label: 'WXPUSHER_UIDS',
+        placeholder: '例如: UID_xxx;UID_yyy',
+        help: '可选，多个用户 ID 用英文分号分隔。'
+      }
     ]
   }
 
@@ -187,8 +319,9 @@ export function useWizard() {
         wizardData.value.arxiv.keywords = Array.from(existing)
       }
       wizardStep.value++
+      return false
     } else {
-      await completeWizard()
+      return await completeWizard()
     }
   }
 
@@ -237,7 +370,10 @@ export function useWizard() {
           active_channel: wizardData.value.notify.channel,
           channels: {}
         }
-        notifyConfig.channels[wizardData.value.notify.channel] = wizardData.value.notify.config
+        notifyConfig.channels[wizardData.value.notify.channel] =
+          wizardData.value.notify.channel === 'console'
+            ? { CONSOLE: true }
+            : wizardData.value.notify.config
         await saveConfig('notify', notifyConfig)
       }
     } catch (e) {
@@ -337,12 +473,14 @@ ${(anchors.low_score_keywords || []).map(k => `- ${k}`).join('\n')}`
         wizardOpen.value = false
         wizardStep.value = 1
         showToast('配置向导已完成！系统已就绪。')
+        return true
       } else {
         showToast(data.message || '完成配置失败', 'error')
       }
     } catch (e) {
       showToast('完成配置失败', 'error')
     }
+    return false
   }
 
   // 测试数据库连接
