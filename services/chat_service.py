@@ -20,7 +20,7 @@ class ChatService:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:
-            from config import LLM_FILTER_CONFIG
+            from config_loader import LLM_FILTER_CONFIG
             config = LLM_FILTER_CONFIG
 
         self.config = config

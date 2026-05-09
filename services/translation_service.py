@@ -16,7 +16,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import LLM_FILTER_CONFIG
+from config_loader import LLM_FILTER_CONFIG
 from services.prompt_service import get_prompt, get_rendered_prompt
 
 logger = logging.getLogger(__name__)

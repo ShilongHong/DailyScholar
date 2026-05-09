@@ -18,7 +18,7 @@ from alibabacloud_tea_util import models as util_models
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import DINGTALK_CONFIG, MESSAGE_CONFIG
+from config_loader import DINGTALK_CONFIG, MESSAGE_CONFIG
 
 logger = logging.getLogger(__name__)
 

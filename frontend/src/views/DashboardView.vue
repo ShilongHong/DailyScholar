@@ -26,17 +26,9 @@
       <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <h3 class="font-semibold text-gray-800 mb-4">系统状态</h3>
         <div class="space-y-4">
-          <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <span class="text-sm text-gray-600">调度器</span>
-            <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">运行中</span>
-          </div>
-          <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <span class="text-sm text-gray-600">数据库</span>
-            <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">已连接</span>
-          </div>
-          <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <span class="text-sm text-gray-600">LLM服务</span>
-            <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">就绪</span>
+          <div v-for="row in systemRows" :key="row.label" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <span class="text-sm text-gray-600">{{ row.label }}</span>
+            <span :class="['px-2 py-1 text-xs font-medium rounded', row.className]">{{ row.value }}</span>
           </div>
         </div>
       </div>
@@ -45,11 +37,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import Chart from 'chart.js/auto'
-import { fetchPaperStats } from '@/api'
+import { fetchAllConfig, fetchHealth, fetchPaperStats, fetchSchedulerStatus } from '@/api'
 
 const stats = ref({})
+const health = ref(null)
+const schedulerStatus = ref(null)
+const appConfig = ref(null)
 const emit = defineEmits(['update:stats'])
 
 const statCards = computed(() => [
@@ -58,6 +53,42 @@ const statCards = computed(() => [
   { label: '待推送队列', value: stats.value.queue_size || 0, icon: 'ph ph-queue', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
   { label: '总收录论文', value: stats.value.total_relevant || 0, icon: 'ph ph-database', bgClass: 'bg-orange-50', textClass: 'text-orange-600' }
 ])
+
+const statusClass = (status) => {
+  if (status === 'ok') return 'bg-green-100 text-green-700'
+  if (status === 'warn') return 'bg-yellow-100 text-yellow-700'
+  if (status === 'loading') return 'bg-gray-100 text-gray-600'
+  return 'bg-red-100 text-red-700'
+}
+
+const systemRows = computed(() => {
+  const dbKnown = health.value !== null
+  const dbOk = health.value?.db === true
+  const schedulerKnown = schedulerStatus.value !== null
+  const schedulerOk = schedulerStatus.value?.running === true
+  const llm = appConfig.value?.llm_filter || {}
+  const llmKey = typeof llm.api_key === 'string' ? llm.api_key.trim() : ''
+  const llmModel = typeof llm.model === 'string' ? llm.model.trim() : ''
+  const llmOk = llm.enable !== false && !!llmModel && !!llmKey
+
+  return [
+    {
+      label: '调度器',
+      value: schedulerKnown ? (schedulerOk ? '运行中' : '未运行') : '检测中',
+      className: statusClass(schedulerKnown ? (schedulerOk ? 'ok' : 'warn') : 'loading')
+    },
+    {
+      label: '数据库',
+      value: dbKnown ? (dbOk ? '已连接' : '未连接') : '检测中',
+      className: statusClass(dbKnown ? (dbOk ? 'ok' : 'error') : 'loading')
+    },
+    {
+      label: 'LLM服务',
+      value: llmOk ? '已配置' : '未配置',
+      className: statusClass(llmOk ? 'ok' : 'warn')
+    }
+  ]
+})
 
 let chartInstance = null
 
@@ -110,12 +141,36 @@ const updateChart = () => {
 
 const loadStats = async () => {
   try {
-    const res = await fetchPaperStats()
-    if (res.data?.success) {
-      stats.value = res.data.data || {}
+    const [statsRes, healthRes, schedulerRes, configRes] = await Promise.allSettled([
+      fetchPaperStats(),
+      fetchHealth(),
+      fetchSchedulerStatus(),
+      fetchAllConfig()
+    ])
+
+    if (statsRes.status === 'fulfilled' && statsRes.value.data?.success) {
+      stats.value = statsRes.value.data.data || {}
       emit('update:stats', stats.value)
       await nextTick()
       updateChart()
+    }
+
+    if (healthRes.status === 'fulfilled') {
+      health.value = healthRes.value.data || null
+    } else {
+      health.value = { db: false }
+    }
+
+    if (schedulerRes.status === 'fulfilled' && schedulerRes.value.data?.success) {
+      schedulerStatus.value = schedulerRes.value.data.data || null
+    } else {
+      schedulerStatus.value = { running: false }
+    }
+
+    if (configRes.status === 'fulfilled' && configRes.value.data?.success) {
+      appConfig.value = configRes.value.data.data || null
+    } else {
+      appConfig.value = null
     }
   } catch (e) {
     console.error('获取统计失败:', e)

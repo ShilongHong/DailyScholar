@@ -2,11 +2,23 @@
 服务模块初始化
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # 导入所有服务类
 from .arxiv_service import ArxivService
 from .llm_filter_service import LLMFilterService
 from .translation_service import TranslationService
-from .dingtalk_service import DingTalkService
+try:
+    from .dingtalk_service import DingTalkService
+except ModuleNotFoundError as exc:
+    logger.warning(f"钉钉 SDK 未安装，钉钉应用机器人通道暂不可用: {exc}")
+
+    class DingTalkService:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("钉钉应用机器人通道需要安装 alibabacloud-dingtalk")
+
 from .dingtalk_http_service import DingTalkHTTPService  # HTTP版本（推荐）
 from .paper_queue_service import PaperQueueService
 from .notify_service import NotifyService

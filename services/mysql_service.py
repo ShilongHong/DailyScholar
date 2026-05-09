@@ -5,13 +5,14 @@ MySQL数据库服务
 
 import logging
 import threading
+from copy import deepcopy
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import ARXIV_CONFIG
+from config_loader import ARXIV_CONFIG
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -20,9 +21,57 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 
+def _deep_merge_dict(base: object, override: object) -> object:
+    if isinstance(base, dict) and isinstance(override, dict):
+        merged = deepcopy(base)
+        for key, value in override.items():
+            merged[key] = _deep_merge_dict(merged.get(key), value)
+        return merged
+    return deepcopy(override)
+
+
+def _load_runtime_mysql_config() -> Dict[str, Any]:
+    runtime_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "runtime_config.json",
+    )
+    if not os.path.exists(runtime_path):
+        return {}
+
+    try:
+        import json
+
+        with open(runtime_path, "r", encoding="utf-8") as f:
+            runtime = json.load(f)
+    except Exception as e:
+        logger.warning(f"读取运行时数据库配置失败: {e}")
+        return {}
+
+    if not isinstance(runtime, dict):
+        return {}
+
+    arxiv_config = runtime.get("arxiv")
+    if isinstance(arxiv_config, dict):
+        mysql_config = arxiv_config.get("mysql")
+        if isinstance(mysql_config, dict):
+            return mysql_config
+
+    legacy_mysql = runtime.get("mysql")
+    if isinstance(legacy_mysql, dict):
+        return legacy_mysql
+
+    return {}
+
+
+def _get_mysql_config() -> Dict[str, Any]:
+    base_config = deepcopy(ARXIV_CONFIG.get("mysql", {}))
+    runtime_config = _load_runtime_mysql_config()
+    return _deep_merge_dict(base_config, runtime_config)
+
+
 def _get_db_type() -> str:
     """获取当前数据库类型"""
-    return ARXIV_CONFIG.get("mysql", {}).get("db_type", "sqlite")
+    return _get_mysql_config().get("db_type", "sqlite")
 
 
 def _get_placeholder() -> str:
@@ -60,7 +109,7 @@ def _normalize_publication_year(publication_year: Any) -> str:
 
 def get_db_connection():
     """获取数据库连接（支持 MySQL 和 SQLite）"""
-    db_config = ARXIV_CONFIG.get("mysql", {})
+    db_config = _get_mysql_config()
     if not db_config.get("enable", False):
         return None
 
@@ -571,7 +620,7 @@ def save_raw_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
     if not conn or not papers:
         return 0
 
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table_raw = mysql_config.get("table_raw", "papers_raw")
     db_type = _get_db_type()
 
@@ -649,7 +698,7 @@ def save_relevant_papers_to_mysql(papers: List[Dict[str, Any]]) -> int:
     if not conn or not papers:
         return 0
 
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table_relevant = mysql_config.get("table_relevant", "papers_relevant")
     db_type = _get_db_type()
 
@@ -809,7 +858,7 @@ def get_all_relevant_papers(
     Returns:
         {'papers': List[Dict], 'total': int}
     """
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
 
     # 构建WHERE条件
@@ -870,7 +919,7 @@ def get_all_relevant_papers(
 
 def get_relevant_papers_by_date(date: str) -> List[Dict]:
     """获取指定日期的相关论文"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
     if _get_db_type() == "sqlite":
         sql = f"SELECT * FROM `{table}` WHERE date(created_at) = date(?) ORDER BY Stars DESC"
@@ -881,7 +930,7 @@ def get_relevant_papers_by_date(date: str) -> List[Dict]:
 
 def get_paper_stats() -> Dict:
     """获取论文统计信息"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table_raw = mysql_config.get("table_raw", "papers_raw")
     table_relevant = mysql_config.get("table_relevant", "papers_relevant")
 
@@ -950,7 +999,7 @@ def get_paper_stats() -> Dict:
 
 def is_mysql_enabled() -> bool:
     """检查MySQL是否启用"""
-    return ARXIV_CONFIG.get("mysql", {}).get("enable", False)
+    return _get_mysql_config().get("enable", False)
 
 
 def is_paper_processed(doi: str, table: str = "papers_relevant") -> bool:
@@ -980,7 +1029,7 @@ def get_processed_dois(table: str = "papers_relevant") -> set:
 
 def update_paper_mark(doi: str, is_marked: bool) -> bool:
     """更新论文标记状态"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
 
     sql = f"UPDATE `{table}` SET is_marked = %s WHERE DOI = %s"
@@ -990,7 +1039,7 @@ def update_paper_mark(doi: str, is_marked: bool) -> bool:
 
 def update_paper_comment(doi: str, comment: str) -> bool:
     """更新论文评论"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
 
     sql = f"UPDATE `{table}` SET comment = %s WHERE DOI = %s"
@@ -1000,7 +1049,7 @@ def update_paper_comment(doi: str, comment: str) -> bool:
 
 def delete_paper(doi: str) -> bool:
     """删除论文"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
 
     sql = f"DELETE FROM `{table}` WHERE DOI = %s"
@@ -1010,7 +1059,7 @@ def delete_paper(doi: str) -> bool:
 
 def get_unprocessed_raw_papers(limit: int = 100) -> List[Dict]:
     """获取未处理的原始论文"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_raw", "papers_raw")
 
     sql = f"SELECT * FROM `{table}` WHERE processed = FALSE ORDER BY created_at DESC LIMIT %s"
@@ -1022,7 +1071,7 @@ def mark_papers_as_processed(dois: List[str]) -> int:
     if not dois:
         return 0
 
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_raw", "papers_raw")
 
     placeholders = ",".join([_get_placeholder()] * len(dois))
@@ -1300,7 +1349,7 @@ def clear_queue_in_db() -> bool:
 
 def get_unpushed_papers(limit: int = 100) -> List[Dict[str, Any]]:
     """获取未推送的相关论文"""
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
 
     try:
@@ -1323,7 +1372,7 @@ def mark_papers_as_pushed(dois: List[str]) -> int:
     if not dois:
         return 0
 
-    mysql_config = ARXIV_CONFIG.get("mysql", {})
+    mysql_config = _get_mysql_config()
     table = mysql_config.get("table_relevant", "papers_relevant")
 
     placeholders = ",".join([_get_placeholder()] * len(dois))

@@ -16,7 +16,7 @@ class DingTalkHTTPService:
     """使用原始HTTP请求的钉钉服务（不依赖SDK）"""
     
     def __init__(self, config: Optional[Dict] = None):
-        from config import DINGTALK_CONFIG, MESSAGE_CONFIG
+        from config_loader import DINGTALK_CONFIG, MESSAGE_CONFIG
         self.config = config or DINGTALK_CONFIG
         self.message_config = MESSAGE_CONFIG
         self._access_token = None

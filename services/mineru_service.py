@@ -9,6 +9,8 @@ import zipfile
 
 import httpx
 
+from config_loader import MINERU_CONFIG
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://mineru.net"
@@ -38,7 +40,7 @@ def _get_mineru_config() -> dict:
     config = load_config_from_db("mineru_config")
     if config:
         return config
-    return {"mode": "cloud", "api_key": "", "endpoint": "http://localhost:18000"}
+    return MINERU_CONFIG.copy()
 
 
 def convert_pdf_cloud(pdf_url: str, api_key: str, language: str = "en") -> dict:

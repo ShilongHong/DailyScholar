@@ -9,8 +9,8 @@
       >
         <i class="ph ph-arrows-clockwise text-xl" :class="{'animate-spin': loading}"></i>
       </button>
-      <div class="h-8 w-px bg-gray-200"></div>
-      <div class="flex gap-2">
+      <div v-if="showGlobalActions" class="h-8 w-px bg-gray-200"></div>
+      <div v-if="showGlobalActions" class="flex gap-2">
         <button
           @click="$emit('action', 'fetch')"
           :disabled="actionLoading"
@@ -53,4 +53,5 @@ defineEmits(['refresh', 'action'])
 
 const route = useRoute()
 const title = computed(() => route.meta.title || '仪表盘')
+const showGlobalActions = computed(() => route.meta.globalActions === true)
 </script>

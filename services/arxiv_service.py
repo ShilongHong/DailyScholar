@@ -16,7 +16,7 @@ import pytz
 # 从父目录导入配置
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import ARXIV_CONFIG, OUTPUT_CONFIG, SCHEDULE_CONFIG
+from config_loader import ARXIV_CONFIG, OUTPUT_CONFIG, SCHEDULE_CONFIG
 
 # 尝试导入MySQL服务
 try:
