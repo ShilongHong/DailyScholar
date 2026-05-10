@@ -7,7 +7,7 @@
       <div class="flex-1">
         <div class="flex items-center gap-2 mb-2">
           <span v-if="paper.PublicationYear" class="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded border border-blue-100">{{ paper.PublicationYear }}</span>
-          <span :class="['px-2 py-0.5 text-xs font-bold rounded', paper.Stars >= 80 ? 'bg-green-100 text-green-700' : paper.Stars >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600']">{{ paper.Stars }}分</span>
+          <span :class="['px-2 py-0.5 text-xs font-bold rounded', paper.Stars >= 80 ? 'bg-green-100 text-green-700' : paper.Stars >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600']">{{ paper.Stars ?? 0 }}分</span>
           <span v-if="paper.is_marked" class="text-red-500 text-xs flex items-center gap-1">
             <i class="ph-fill ph-heart"></i> 已标记
           </span>
