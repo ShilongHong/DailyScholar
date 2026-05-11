@@ -16,7 +16,7 @@
             <span class="px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-full">
               {{ paper.PublicationYear }}
             </span>
-            <span :class="['px-2.5 py-1 text-xs font-bold rounded-full', paper.Stars >= 80 ? 'bg-green-100 text-green-700' : paper.Stars >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600']">{{ paper.Stars }}分/100</span>
+            <span :class="['px-2.5 py-1 text-xs font-bold rounded-full', paper.Stars >= 80 ? 'bg-green-100 text-green-700' : paper.Stars >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600']">{{ paper.Stars ?? 0 }}分/100</span>
             <span v-if="paper.Source" class="px-2.5 py-1 bg-purple-50 text-purple-600 text-xs font-medium rounded-full border border-purple-100">
               {{ paper.Source }}
             </span>
