@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 h-full">
+  <div ref="rootEl" class="space-y-4 h-full">
     <!-- 筛选栏 -->
     <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center justify-between">
       <div class="flex items-center gap-4 flex-1 flex-wrap">
@@ -111,6 +111,8 @@ import {
 
 const { showToast } = useToast()
 
+const rootEl = ref(null)
+
 // 论文数据
 const papers = ref([])
 const loading = ref(false)
@@ -202,7 +204,8 @@ const goToPage = async (page) => {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
     await fetchPapers()
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    const container = rootEl.value?.closest('.overflow-y-auto')
+    if (container) container.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
