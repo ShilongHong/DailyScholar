@@ -30,9 +30,9 @@
             <p class="text-xs text-gray-400 mt-1 truncate">{{ paper.Author }}</p>
           </div>
         </div>
-        <div v-if="queueStatus.size === 0" class="p-8 text-center text-gray-500">
-          队列为空
-        </div>
+      </div>
+      <div v-if="queueStatus.size === 0" class="p-8 text-center text-gray-500">
+        队列为空
       </div>
     </div>
   </div>
