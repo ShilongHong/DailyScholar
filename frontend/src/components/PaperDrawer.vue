@@ -88,7 +88,7 @@
           </div>
           <div>
             <span class="text-xs text-gray-500 block mb-1">来源</span>
-            <span class="text-sm text-gray-800">{{ paper.Source }}</span>
+            <span class="text-sm text-gray-800">{{ paper.Source || '-' }}</span>
           </div>
         </div>
 
