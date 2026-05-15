@@ -42,7 +42,7 @@
             <i class="ph ph-thumbs-up"></i> 推荐理由
           </h4>
           <p class="text-sm text-blue-900/80 leading-relaxed">
-            {{ paper.RelevanceReason }}
+            {{ paper.RelevanceReason || '暂无' }}
           </p>
         </div>
 
