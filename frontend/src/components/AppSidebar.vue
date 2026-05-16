@@ -38,7 +38,7 @@
       <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
         <div class="flex justify-between mb-1">
           <span>版本</span>
-          <span class="font-medium">v3.0.0</span>
+          <span class="font-medium">v3.0</span>
         </div>
         <div class="flex justify-between">
           <span>状态</span>
