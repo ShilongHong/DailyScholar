@@ -20,7 +20,7 @@
       <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <h3 class="font-semibold text-gray-800 mb-4">分数分布</h3>
         <div class="h-64 flex items-center justify-center">
-          <canvas id="starsChart"></canvas>
+          <canvas ref="chartRef"></canvas>
         </div>
       </div>
       <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -91,9 +91,10 @@ const systemRows = computed(() => {
 })
 
 let chartInstance = null
+const chartRef = ref(null)
 
 const updateChart = () => {
-  const ctx = document.getElementById('starsChart')
+  const ctx = chartRef.value
   if (!ctx || !stats.value.by_score_range) return
 
   if (chartInstance) chartInstance.destroy()
