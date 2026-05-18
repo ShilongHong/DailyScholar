@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import Chart from 'chart.js/auto'
 import { fetchAllConfig, fetchHealth, fetchPaperStats, fetchSchedulerStatus } from '@/api'
 
@@ -180,6 +180,13 @@ const loadStats = async () => {
 
 // 暴露给父组件调用
 defineExpose({ refresh: loadStats })
+
+onBeforeUnmount(() => {
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+})
 
 onMounted(() => {
   loadStats()
