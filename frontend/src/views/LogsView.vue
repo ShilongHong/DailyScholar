@@ -102,7 +102,7 @@ const onFileChange = () => {
 
 const startAutoRefresh = () => {
   stopAutoRefresh()
-  logInterval = setInterval(() => loadLogContent(false), 1000)
+  logInterval = setInterval(() => loadLogContent(false), 3000)
 }
 
 const stopAutoRefresh = () => {
