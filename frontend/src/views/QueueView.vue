@@ -24,7 +24,7 @@
                   paper.Stars >= 60 ? 'bg-yellow-100 text-yellow-700' :
                   'bg-gray-100 text-gray-600'
                 ]"
-              >{{ paper.Stars }}分</span>
+              >{{ paper.Stars ?? 0 }}分</span>
               <span class="truncate" :title="paper.RelevanceReason">{{ paper.RelevanceReason || '待评分' }}</span>
             </div>
             <p class="text-xs text-gray-400 mt-1 truncate">{{ paper.Author }}</p>
