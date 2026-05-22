@@ -376,7 +376,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { fetchPaperByDoi, translateFullPaper, fetchTranslateFullStatus, getTranslateFullStreamUrl, fetchPaperMarkdown, convertPaperToMarkdown, fetchConvertStatus } from '@/api'
 import PdfViewer from '@/components/reader/PdfViewer.vue'
@@ -783,9 +783,9 @@ onBeforeUnmount(() => {
   }
 })
 
-onMounted(() => {
+watch(doi, () => {
   fetchPaper()
-})
+}, { immediate: true })
 </script>
 
 <style scoped>
