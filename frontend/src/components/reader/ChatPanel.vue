@@ -229,6 +229,7 @@ const send = async () => {
     streaming.value = false
     streamingContent.value = ''
     scrollToBottom()
+    inputRef.value?.focus()
   }
 }
 
