@@ -153,9 +153,7 @@ const localComment = ref('')
 
 // 同步 paper.comment 到 localComment
 watch(() => props.paper?.comment, (val) => {
-  if (val !== undefined) {
-    localComment.value = val
-  }
+  localComment.value = val || ''
 }, { immediate: true })
 
 // 失焦时触发保存
