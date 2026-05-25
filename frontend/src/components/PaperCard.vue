@@ -30,7 +30,7 @@
         </div>
       </div>
       <div class="flex flex-col gap-2">
-        <button @click.stop="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
+        <button v-if="paper.DOI" @click.stop="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
           class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="在线阅读">
           <i class="ph ph-book-open"></i>
         </button>
