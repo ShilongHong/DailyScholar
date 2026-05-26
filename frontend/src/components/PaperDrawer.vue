@@ -111,7 +111,7 @@
 
       <!-- 抽屉底部 -->
       <div class="p-4 border-t border-gray-100 bg-gray-50 flex flex-wrap gap-2 text-sm">
-        <a :href="paper.PDFLink || paper.Link" target="_blank" class="flex-1 min-w-0 bg-primary text-white text-center py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
+        <a v-if="paper.PDFLink || paper.Link" :href="paper.PDFLink || paper.Link" target="_blank" class="flex-1 min-w-0 bg-primary text-white text-center py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
           <i class="ph ph-file-pdf"></i> 阅读原文
         </a>
         <button @click="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
