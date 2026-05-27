@@ -4,7 +4,7 @@
     class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group relative"
   >
     <div class="flex justify-between items-start gap-4">
-      <div class="flex-1">
+      <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-2">
           <span v-if="paper.PublicationYear" class="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded border border-blue-100">{{ paper.PublicationYear }}</span>
           <span :class="['px-2 py-0.5 text-xs font-bold rounded', paper.Stars >= 80 ? 'bg-green-100 text-green-700' : paper.Stars >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600']">{{ paper.Stars ?? 0 }}分</span>
