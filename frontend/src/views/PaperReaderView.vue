@@ -141,7 +141,7 @@
             </div>
           </div>
           <iframe
-            v-show="!htmlLoading && !htmlError"
+            v-if="!htmlLoading && !htmlError"
             :src="htmlProxyUrl"
             class="w-full h-full border-0"
             @load="htmlLoading = false"
