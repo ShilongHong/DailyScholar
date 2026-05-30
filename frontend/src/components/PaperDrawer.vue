@@ -114,7 +114,7 @@
         <a v-if="paper.PDFLink || paper.Link" :href="paper.PDFLink || paper.Link" target="_blank" class="flex-1 min-w-0 bg-primary text-white text-center py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
           <i class="ph ph-file-pdf"></i> 阅读原文
         </a>
-        <button @click="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
+        <button v-if="paper.DOI" @click="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
           class="flex-1 min-w-0 py-2 rounded-lg font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5">
           <i class="ph ph-book-open"></i> 在线阅读
         </button>
