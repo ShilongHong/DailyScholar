@@ -20,7 +20,7 @@
         </div>
         <h3 class="font-semibold text-gray-900 text-lg mb-1 group-hover:text-primary transition-colors line-clamp-2">{{ paper.TitleCN || paper.Title }}</h3>
         <p class="text-sm text-gray-500 mb-3 line-clamp-1">{{ paper.Author || '-' }}</p>
-        <p class="text-sm text-gray-600 line-clamp-2">{{ paper.RelevanceReason }}</p>
+        <p class="text-sm text-gray-600 line-clamp-2">{{ paper.RelevanceReason || '暂无评分理由' }}</p>
         <!-- 显示评论 -->
         <div v-if="paper.comment" class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
           <div class="flex items-start gap-2">
