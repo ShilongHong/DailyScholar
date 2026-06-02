@@ -28,7 +28,7 @@
             {{ paper.Title }}
           </h3>
         </div>
-        <button @click="$emit('update:open', false)" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
+        <button @click="$emit('update:open', false)" aria-label="关闭" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
           <i class="ph ph-x text-xl"></i>
         </button>
       </div>
