@@ -1,13 +1,14 @@
 <template>
   <div class="h-full flex flex-col">
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
-      <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <div class="flex items-center gap-4">
+      <div class="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-gray-50">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <h3 class="font-semibold text-gray-800">系统日志</h3>
           <el-select
             v-model="selectedLogFile"
             size="small"
-            class="w-48"
+            aria-label="选择日志文件"
+            class="w-full sm:w-48"
             @change="onFileChange"
           >
             <el-option
@@ -23,6 +24,7 @@
             text
             class="p-2 text-gray-500 hover:text-primary hover:bg-white"
             title="刷新日志"
+            aria-label="刷新日志"
             @click="loadLogContent(true)"
           >
             <i class="ph ph-arrows-clockwise text-lg"></i>

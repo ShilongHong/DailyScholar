@@ -1,27 +1,30 @@
 <template>
-  <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
-    <div class="p-6 flex items-center gap-3 border-b border-gray-100">
+  <aside class="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-gray-200 flex md:flex-col shrink-0 shadow-sm z-10">
+    <div class="p-4 md:p-6 flex items-center gap-3 border-r md:border-r-0 md:border-b border-gray-100 shrink-0">
       <div class="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center text-white font-bold">
         <i class="ph ph-book-open-text text-xl"></i>
       </div>
       <h1 class="font-bold text-lg tracking-tight text-gray-900">DailyScholar</h1>
     </div>
 
-    <nav class="flex-1 p-4 space-y-5 overflow-y-auto">
-      <div v-for="group in navGroups" :key="group.label" class="space-y-1">
-        <div class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+    <nav class="flex-1 p-2 md:p-4 flex md:block gap-3 md:space-y-5 overflow-x-auto md:overflow-x-visible md:overflow-y-auto" aria-label="主导航">
+      <div v-for="group in navGroups" :key="group.label" class="flex md:block shrink-0 md:space-y-1">
+        <div class="hidden md:block px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
           {{ group.label }}
         </div>
+        <div class="flex md:block gap-1 md:space-y-1">
         <router-link
           v-for="item in group.items"
           :key="item.to"
           :to="item.to"
           custom
-          v-slot="{ isActive, navigate }"
+          v-slot="{ href, isActive, navigate }"
         >
-          <div
+          <a
+            :href="href"
             @click="navigate"
-            :class="['flex items-center gap-3 px-4 py-3 rounded-lg transition-colors cursor-pointer', isActive ? 'bg-primary/10 text-primary font-medium' : 'text-gray-600 hover:bg-gray-50']"
+            :aria-current="isActive ? 'page' : undefined"
+            :class="['flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 min-h-11 rounded-lg transition-colors whitespace-nowrap', isActive ? 'bg-primary/10 text-primary font-medium' : 'text-gray-600 hover:bg-gray-50']"
           >
             <i :class="[item.icon, 'text-xl']"></i>
             {{ item.label }}
@@ -29,12 +32,13 @@
               v-if="item.name === 'queue' && queueSize > 0"
               class="ml-auto bg-primary text-white text-xs px-2 py-0.5 rounded-full"
             >{{ queueSize }}</span>
-          </div>
+          </a>
         </router-link>
+        </div>
       </div>
     </nav>
 
-    <div class="p-4 border-t border-gray-100">
+    <div class="hidden md:block p-4 border-t border-gray-100">
       <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
         <div class="flex justify-between mb-1">
           <span>版本</span>

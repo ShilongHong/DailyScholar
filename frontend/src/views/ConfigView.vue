@@ -4,7 +4,8 @@
     <div class="mb-4 flex justify-end">
       <button
         @click="$emit('open-wizard')"
-        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+        type="button"
+        class="min-h-11 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
       >
         <i class="ph ph-arrows-clockwise"></i>
         重新运行配置向导
@@ -13,12 +14,14 @@
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div class="border-b border-gray-100">
-        <nav class="flex -mb-px">
+        <nav class="flex -mb-px overflow-x-auto" aria-label="配置分类">
           <button
             v-for="tab in tabs"
             :key="tab.key"
             @click="activeTab = tab.key"
-            :class="['px-6 py-4 text-sm font-medium border-b-2 transition-colors',
+            type="button"
+            :aria-pressed="activeTab === tab.key"
+            :class="['shrink-0 px-6 py-4 text-sm font-medium border-b-2 transition-colors',
               activeTab === tab.key ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
           >
             {{ tab.label }}
@@ -26,10 +29,10 @@
         </nav>
       </div>
 
-      <div class="p-6" v-if="configData">
+      <div class="p-4 md:p-6" v-if="configData">
         <!-- ==================== Tab 1: LLM 筛选 ==================== -->
         <div v-if="activeTab === 'llm_filter'" class="space-y-6">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 class="text-lg font-medium text-gray-900">LLM 筛选设置</h3>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" v-model="configData.llm_filter.enable" class="sr-only peer">
@@ -51,7 +54,7 @@
                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary/50 focus:ring-opacity-50">
               <p class="mt-1 text-xs text-gray-500">示例：OpenAI 用 https://api.openai.com/v1，DeepSeek 用 https://api.deepseek.com/v1。</p>
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
                 <input type="text" v-model="configData.llm_filter.model" placeholder="例如: gpt-4o-mini 或 deepseek-chat"
@@ -64,7 +67,7 @@
                 <p class="mt-1 text-xs text-gray-500">建议8-16，过高可能被限流</p>
               </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">最低分数要求 (0-100)</label>
                 <input type="number" min="0" max="100" v-model="configData.llm_filter.min_score"
@@ -107,9 +110,9 @@
             </div>
           </div>
 
-          <div class="flex justify-end gap-3 pt-4">
-            <button @click="savePromptConfig" class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">保存筛选提示词</button>
-            <button @click="saveConfigSection('llm_filter')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存 LLM 设置</button>
+          <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4">
+            <button type="button" @click="savePromptConfig" class="min-h-11 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">保存筛选提示词</button>
+            <button type="button" @click="saveConfigSection('llm_filter')" class="min-h-11 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存 LLM 设置</button>
           </div>
         </div>
 
@@ -136,11 +139,11 @@
               </div>
             </div>
             <p class="text-sm text-gray-600 mb-3">基于您的研究方向，AI 可以自动生成评分锚点关键词和评分示例，提高筛选精准度。</p>
-            <div class="flex gap-3">
+            <div class="flex flex-col sm:flex-row gap-3">
               <input v-model="researchBrief" type="text" placeholder="例如：我的研究方向是多模态大模型在医疗影像中的应用"
-                class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring focus:ring-purple-500/50 text-sm">
-              <button @click="generateResearch" :disabled="generatingResearch || !researchBrief"
-                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                class="flex-1 min-h-11 rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring focus:ring-purple-500/50 text-sm">
+              <button type="button" @click="generateResearch" :disabled="generatingResearch || !researchBrief"
+                class="min-h-11 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 <i class="ph ph-magic-wand"></i>
                 <span v-if="generatingResearch">生成中...</span>
                 <span v-else>AI 生成</span>
@@ -236,7 +239,7 @@
 
           <!-- 保存按钮 -->
           <div class="flex justify-end pt-6 border-t border-gray-200">
-            <button @click="saveResearchConfig" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
+            <button type="button" @click="saveResearchConfig" class="min-h-11 px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
               <i class="ph ph-check"></i> 保存研究方向配置
             </button>
           </div>
@@ -252,7 +255,7 @@
               placeholder="例如：&#10;cs.CL&#10;cat:cs.AI&#10;large language model&#10;multimodal retrieval"></textarea>
             <p class="mt-1 text-xs text-gray-500">例如: cs.CL, cs.CV, cat:cs.AI</p>
           </div>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">每个关键词最大结果数</label>
               <input type="number" v-model="configData.arxiv.max_results_per_keyword"
@@ -266,7 +269,7 @@
               <p class="mt-1 text-xs text-gray-500">建议3秒，避免被限流</p>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">获取论文天数范围</label>
               <input type="number" v-model="configData.arxiv.recent_days"
@@ -281,7 +284,7 @@
             </div>
           </div>
           <div class="flex justify-end pt-4">
-            <button @click="saveConfigSection('arxiv')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存 ArXiv 设置</button>
+            <button type="button" @click="saveConfigSection('arxiv')" class="min-h-11 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存 ArXiv 设置</button>
           </div>
         </div>
 
@@ -345,7 +348,7 @@
           </div>
 
           <div class="flex justify-end pt-4">
-            <button @click="saveConfigSection('schedule')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存调度设置</button>
+            <button type="button" @click="saveConfigSection('schedule')" class="min-h-11 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存调度设置</button>
           </div>
         </div>
 
@@ -357,7 +360,7 @@
           />
 
           <div class="flex justify-end pt-4">
-            <button @click="saveConfigSection('notify')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存通知设置</button>
+            <button type="button" @click="saveConfigSection('notify')" class="min-h-11 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存通知设置</button>
           </div>
         </div>
 
@@ -423,7 +426,7 @@
           </div>
 
           <div class="flex justify-end pt-4 border-t border-gray-200">
-            <button @click="saveConfigSection('mineru_config')" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
+            <button type="button" @click="saveConfigSection('mineru_config')" class="min-h-11 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
               <i class="ph ph-check"></i> 保存 MinerU 设置
             </button>
           </div>

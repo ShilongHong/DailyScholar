@@ -1,15 +1,16 @@
 <template>
-  <div class="bg-gray-50 text-gray-800 h-screen w-full flex overflow-hidden">
+  <div class="bg-gray-50 text-gray-800 h-screen w-full flex flex-col md:flex-row overflow-hidden">
     <template v-if="!hideSidebar">
       <AppSidebar :queue-size="queueSize" />
       <main class="flex-1 flex flex-col h-full overflow-hidden relative">
         <AppHeader
           :loading="loading"
           :action-loading="actionLoading"
+          :action-loading-type="actionLoadingType"
           @refresh="refreshAll"
           @action="triggerAction"
         />
-        <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
           <router-view ref="currentViewRef" @open-wizard="openWizard" />
         </div>
       </main>
@@ -43,6 +44,7 @@ const hideSidebar = computed(() => !!route.meta.hideSidebar)
 // 全局共享状态
 const loading = ref(false)
 const actionLoading = ref(false)
+const actionLoadingType = ref('')
 const queueSize = ref(0)
 const currentViewRef = ref(null)
 const wizardOpen = ref(false)
@@ -85,6 +87,7 @@ const refreshAll = async () => {
 const triggerAction = async (action) => {
   if (actionLoading.value) return
   actionLoading.value = true
+  actionLoadingType.value = action
 
   const actionMap = {
     fetch: { fn: triggerFetch, text: '获取任务' },
@@ -96,6 +99,7 @@ const triggerAction = async (action) => {
   if (!config) {
     showToast('未知操作', 'error')
     actionLoading.value = false
+    actionLoadingType.value = ''
     return
   }
 
@@ -111,6 +115,7 @@ const triggerAction = async (action) => {
     showToast('网络请求失败', 'error')
   } finally {
     actionLoading.value = false
+    actionLoadingType.value = ''
   }
 }
 

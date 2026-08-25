@@ -3,7 +3,7 @@
     :model-value="open"
     @update:model-value="$emit('update:open', $event)"
     direction="rtl"
-    :size="'480px'"
+    :size="drawerSize"
     :with-header="false"
     :show-close="false"
     class="paper-drawer"
@@ -111,22 +111,24 @@
 
       <!-- 抽屉底部 -->
       <div class="p-4 border-t border-gray-100 bg-gray-50 flex flex-wrap gap-2 text-sm">
-        <a v-if="paper.PDFLink || paper.Link" :href="paper.PDFLink || paper.Link" target="_blank" class="flex-1 min-w-0 bg-primary text-white text-center py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
+        <a v-if="paper.PDFLink || paper.Link" :href="paper.PDFLink || paper.Link" target="_blank" rel="noopener noreferrer" class="flex-1 min-w-[120px] bg-primary text-white text-center py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
           <i class="ph ph-file-pdf"></i> 阅读原文
         </a>
-        <button v-if="paper.DOI" @click="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
-          class="flex-1 min-w-0 py-2 rounded-lg font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5">
+        <button v-if="paper.DOI" type="button" @click="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
+          class="flex-1 min-w-[120px] py-2 rounded-lg font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors flex items-center justify-center gap-1.5">
           <i class="ph ph-book-open"></i> 在线阅读
         </button>
-        <button @click="$emit('toggle-mark', paper)" :class="['py-2 px-3 rounded-lg font-medium border transition-colors flex items-center justify-center gap-1.5', paper.is_marked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50']">
-          <i :class="paper.is_marked ? 'ph-fill ph-heart' : 'ph ph-heart'"></i>
+        <button type="button" @click="$emit('toggle-mark', paper)" :disabled="loadingMark" :class="['py-2 px-3 rounded-lg font-medium border transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed', paper.is_marked ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50']">
+          <i :class="loadingMark ? 'ph ph-spinner animate-spin' : paper.is_marked ? 'ph-fill ph-heart' : 'ph ph-heart'"></i>
           {{ paper.is_marked ? '取消标记' : '标记' }}
         </button>
-        <button @click="$emit('retranslate', paper)" class="py-2 px-3 rounded-lg font-medium border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5">
-          <i class="ph ph-translate"></i> 翻译
+        <button type="button" @click="$emit('retranslate', paper)" :disabled="loadingRetranslate" class="py-2 px-3 rounded-lg font-medium border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i :class="loadingRetranslate ? 'ph ph-spinner animate-spin' : 'ph ph-translate'"></i>
+          {{ loadingRetranslate ? '翻译中' : '翻译' }}
         </button>
-        <button @click="$emit('delete', paper)" class="py-2 px-3 rounded-lg font-medium border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5">
-          <i class="ph ph-trash"></i> 删除
+        <button type="button" @click="$emit('delete', paper)" :disabled="loadingDelete" class="py-2 px-3 rounded-lg font-medium border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i :class="loadingDelete ? 'ph ph-spinner animate-spin' : 'ph ph-trash'"></i>
+          {{ loadingDelete ? '删除中' : '删除' }}
         </button>
       </div>
     </div>
@@ -134,7 +136,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   paper: {
@@ -144,12 +146,19 @@ const props = defineProps({
   open: {
     type: Boolean,
     default: false
-  }
+  },
+  loadingMark: Boolean,
+  loadingRetranslate: Boolean,
+  loadingDelete: Boolean
 })
 
 const emit = defineEmits(['update:open', 'toggle-mark', 'retranslate', 'delete', 'update-comment'])
 
 const localComment = ref('')
+const drawerSize = computed(() => {
+  if (typeof window === 'undefined') return '480px'
+  return window.innerWidth < 640 ? '100%' : '480px'
+})
 
 // 同步 paper.comment 到 localComment
 watch(() => props.paper?.comment, (val) => {

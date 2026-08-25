@@ -1,6 +1,11 @@
 <template>
   <div
     @click="$emit('click', paper)"
+    @keydown.enter.prevent="$emit('click', paper)"
+    @keydown.space.prevent="$emit('click', paper)"
+    role="button"
+    tabindex="0"
+    :aria-label="`查看论文详情：${paper.TitleCN || paper.Title || '未命名论文'}`"
     class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group relative"
   >
     <div class="flex justify-between items-start gap-4">
@@ -25,23 +30,26 @@
         <div v-if="paper.comment" class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
           <div class="flex items-start gap-2">
             <i class="ph ph-chat-circle-text text-blue-600 text-sm mt-0.5"></i>
-            <p class="text-sm text-blue-900 flex-1">{{ paper.comment }}</p>
+            <p class="text-sm text-blue-900 flex-1 break-words">{{ paper.comment }}</p>
           </div>
         </div>
       </div>
       <div class="flex flex-col gap-2">
-        <button v-if="paper.DOI" @click.stop="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
-          class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="在线阅读">
+        <button v-if="paper.DOI" type="button" @click.stop="$router.push(`/reader/${encodeURIComponent(paper.DOI)}`)"
+          class="min-h-11 min-w-11 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-primary transition-colors" title="在线阅读" aria-label="在线阅读">
           <i class="ph ph-book-open"></i>
         </button>
-        <button @click.stop="$emit('toggle-mark', paper)" class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-500 transition-colors" title="标记/取消标记">
-          <i :class="paper.is_marked ? 'ph-fill ph-heart text-red-500' : 'ph ph-heart'"></i>
+        <button type="button" @click.stop="$emit('toggle-mark', paper)" :disabled="loadingMark"
+          class="min-h-11 min-w-11 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-500 disabled:opacity-40 transition-colors" title="标记/取消标记" :aria-label="paper.is_marked ? '取消标记' : '标记论文'">
+          <i :class="loadingMark ? 'ph ph-spinner animate-spin' : paper.is_marked ? 'ph-fill ph-heart text-red-500' : 'ph ph-heart'"></i>
         </button>
-        <button @click.stop="$emit('retranslate', paper)" class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-blue-500 transition-colors" title="重新翻译">
-          <i class="ph ph-translate"></i>
+        <button type="button" @click.stop="$emit('retranslate', paper)" :disabled="loadingRetranslate"
+          class="min-h-11 min-w-11 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-blue-500 disabled:opacity-40 transition-colors" title="重新翻译" aria-label="重新翻译">
+          <i :class="loadingRetranslate ? 'ph ph-spinner animate-spin' : 'ph ph-translate'"></i>
         </button>
-        <button @click.stop="$emit('delete', paper)" class="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors" title="删除">
-          <i class="ph ph-trash"></i>
+        <button type="button" @click.stop="$emit('delete', paper)" :disabled="loadingDelete"
+          class="min-h-11 min-w-11 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-600 disabled:opacity-40 transition-colors" title="删除" aria-label="删除论文">
+          <i :class="loadingDelete ? 'ph ph-spinner animate-spin' : 'ph ph-trash'"></i>
         </button>
       </div>
     </div>
@@ -53,7 +61,10 @@ defineProps({
   paper: {
     type: Object,
     required: true
-  }
+  },
+  loadingMark: Boolean,
+  loadingRetranslate: Boolean,
+  loadingDelete: Boolean
 })
 
 defineEmits(['click', 'toggle-mark', 'retranslate', 'delete'])

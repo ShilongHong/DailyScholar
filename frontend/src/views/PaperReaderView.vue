@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col bg-gray-50">
     <!-- Top bar -->
-    <div class="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 shrink-0">
+    <div class="min-h-14 bg-white border-b border-gray-200 flex flex-wrap items-center px-3 md:px-4 py-2 gap-2 md:gap-4 shrink-0">
       <!-- Back button -->
       <button
         @click="$router.back()"
@@ -12,17 +12,18 @@
       </button>
 
       <!-- Divider -->
-      <div class="w-px h-6 bg-gray-200 shrink-0"></div>
+      <div class="hidden sm:block w-px h-6 bg-gray-200 shrink-0"></div>
 
       <!-- Paper title -->
-      <h2 class="font-semibold text-gray-800 truncate flex-1 text-sm">
+      <h2 class="font-semibold text-gray-800 truncate flex-1 min-w-[140px] text-sm">
         {{ paper?.TitleCN || paper?.Title || '加载中...' }}
       </h2>
 
       <!-- View mode toggle -->
-      <div class="flex items-center bg-gray-100 rounded-lg p-0.5 shrink-0">
+      <div class="flex items-center bg-gray-100 rounded-lg p-0.5 shrink-0 overflow-x-auto">
         <button
           @click="viewMode = 'pdf'"
+          :aria-pressed="viewMode === 'pdf'"
           :class="[
             'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
             viewMode === 'pdf'
@@ -34,6 +35,7 @@
         </button>
         <button
           @click="viewMode = 'markdown'"
+          :aria-pressed="viewMode === 'markdown'"
           :class="[
             'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
             viewMode === 'markdown'
@@ -46,6 +48,7 @@
         <button
           v-if="hasHtmlVersion"
           @click="viewMode = 'html'"
+          :aria-pressed="viewMode === 'html'"
           :class="[
             'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
             viewMode === 'html'
@@ -60,6 +63,8 @@
       <!-- Sidebar toggle -->
       <button
         @click="sidebarVisible = !sidebarVisible"
+        aria-label="切换侧栏"
+        :aria-expanded="sidebarVisible ? 'true' : 'false'"
         :class="[
           'p-2 rounded-lg transition-colors shrink-0',
           sidebarVisible ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
@@ -71,7 +76,7 @@
     </div>
 
     <!-- Main area -->
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
       <!-- Left panel: content viewer -->
       <div class="flex-1 flex flex-col overflow-hidden">
         <!-- Loading state -->
@@ -134,6 +139,7 @@
                 v-if="htmlDirectUrl"
                 :href="htmlDirectUrl"
                 target="_blank"
+                rel="noopener noreferrer"
                 class="mt-3 inline-block px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary/90 transition-colors"
               >
                 <i class="ph ph-arrow-square-out mr-1"></i>在新标签页打开
@@ -141,8 +147,9 @@
             </div>
           </div>
           <iframe
-            v-if="!htmlLoading && !htmlError"
+            v-show="!htmlError"
             :src="htmlProxyUrl"
+            title="论文 HTML 阅读视图"
             class="w-full h-full border-0"
             @load="htmlLoading = false"
             @error="htmlError = 'HTML 页面加载失败，请尝试在新标签页打开'"
@@ -154,7 +161,7 @@
       <transition name="sidebar-slide">
         <div
           v-show="sidebarVisible"
-          class="w-[380px] border-l border-gray-200 bg-white overflow-hidden shrink-0"
+          class="w-full lg:w-[380px] max-h-[45vh] lg:max-h-none border-t lg:border-t-0 lg:border-l border-gray-200 bg-white overflow-hidden shrink-0"
         >
           <div v-if="!paper" class="flex items-center justify-center h-full">
             <i class="ph ph-spinner-gap text-2xl text-gray-300 animate-spin"></i>
@@ -376,14 +383,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { defineAsyncComponent, ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { fetchPaperByDoi, translateFullPaper, fetchTranslateFullStatus, getTranslateFullStreamUrl, fetchPaperMarkdown, convertPaperToMarkdown, fetchConvertStatus } from '@/api'
-import PdfViewer from '@/components/reader/PdfViewer.vue'
 import MarkdownViewer from '@/components/reader/MarkdownViewer.vue'
 import ChatPanel from '@/components/reader/ChatPanel.vue'
 
 const route = useRoute()
+const PdfViewer = defineAsyncComponent(() => import('@/components/reader/PdfViewer.vue'))
 
 // State
 const paper = ref(null)

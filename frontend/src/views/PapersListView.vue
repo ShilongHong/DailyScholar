@@ -3,23 +3,28 @@
     <!-- 筛选栏 -->
     <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-4 items-center justify-between">
       <div class="flex items-center gap-4 flex-1 flex-wrap">
-        <div class="relative flex-1 max-w-md">
+        <div class="relative flex-1 min-w-full sm:min-w-[220px] sm:max-w-md">
           <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-          <input v-model="searchQuery" type="text" placeholder="搜索标题、作者..." class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+          <label for="paper-search" class="sr-only">搜索标题、作者</label>
+          <input id="paper-search" v-model="searchQuery" type="text" placeholder="搜索标题、作者..." class="w-full min-h-11 pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
         </div>
-        <div class="flex items-center gap-2">
-          <input v-model="filterDateStart" type="date" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="开始日期">
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="paper-date-start" class="sr-only">开始日期</label>
+          <input id="paper-date-start" v-model="filterDateStart" type="date" class="min-h-11 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="开始日期">
           <span class="text-gray-400 text-sm">至</span>
-          <input v-model="filterDateEnd" type="date" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="结束日期">
+          <label for="paper-date-end" class="sr-only">结束日期</label>
+          <input id="paper-date-end" v-model="filterDateEnd" type="date" class="min-h-11 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="结束日期">
         </div>
-        <select v-model="filterStars" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+        <label for="paper-min-score" class="sr-only">最低分数</label>
+        <select id="paper-min-score" v-model="filterStars" class="min-h-11 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
           <option value="0">所有分数</option>
           <option value="90">90+ (高度相关)</option>
           <option value="80">80+ (很相关)</option>
           <option value="70">70+ (较相关)</option>
           <option value="60">60+ (及格)</option>
         </select>
-        <select v-model="filterComment" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+        <label for="paper-comment-filter" class="sr-only">评论筛选</label>
+        <select id="paper-comment-filter" v-model="filterComment" class="min-h-11 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
           <option value="all">全部论文</option>
           <option value="with">有评论</option>
           <option value="without">无评论</option>
@@ -32,9 +37,9 @@
           <input type="checkbox" v-model="showPushed" class="rounded text-primary focus:ring-primary">
           显示已推送
         </label>
-        <button @click="onConfirmFilters" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2 shadow-sm shadow-primary/30">
-          <i class="ph ph-funnel"></i>
-          确定筛选
+        <button type="button" @click="onConfirmFilters" :disabled="loading" class="min-h-11 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2 shadow-sm shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i :class="loading ? 'ph ph-spinner animate-spin' : 'ph ph-funnel'"></i>
+          {{ loading ? '筛选中...' : '确定筛选' }}
         </button>
       </div>
       <div class="text-sm text-gray-500">
@@ -48,6 +53,9 @@
         v-for="paper in papers"
         :key="paper.DOI"
         :paper="paper"
+        :loading-mark="loadingMark.has(paper.DOI)"
+        :loading-retranslate="loadingRetranslate.has(paper.DOI)"
+        :loading-delete="loadingDelete.has(paper.DOI)"
         @click="openDrawer(paper)"
         @toggle-mark="toggleMark"
         @retranslate="retranslatePaper"
@@ -58,25 +66,33 @@
       <div v-if="papers.length === 0 && !loading" class="text-center py-12 text-gray-500">
         <i class="ph ph-files text-4xl mb-2 opacity-50"></i>
         <p>没有找到符合条件的论文</p>
+        <button
+          v-if="hasActiveFilters"
+          type="button"
+          @click="resetFilters"
+          class="mt-4 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm hover:bg-gray-50 transition-colors"
+        >
+          清空筛选条件
+        </button>
       </div>
     </div>
 
     <!-- 分页 -->
-    <div v-if="totalPages > 1" class="flex items-center justify-between mt-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+    <div v-if="totalPages > 1" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
       <div class="text-sm text-gray-600">
         第 {{ currentPage }} / {{ totalPages }} 页，共 {{ totalCount }} 篇论文
       </div>
-      <div class="flex gap-2">
-        <button @click="goToPage(1)" :disabled="currentPage === 1" class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+      <div class="flex flex-wrap gap-2">
+        <button type="button" @click="goToPage(1)" :disabled="currentPage === 1" class="min-h-11 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
           首页
         </button>
-        <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+        <button type="button" @click="goToPage(currentPage - 1)" :disabled="currentPage === 1" class="min-h-11 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
           上一页
         </button>
-        <button @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages" class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+        <button type="button" @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages" class="min-h-11 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
           下一页
         </button>
-        <button @click="goToPage(totalPages)" :disabled="currentPage === totalPages" class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+        <button type="button" @click="goToPage(totalPages)" :disabled="currentPage === totalPages" class="min-h-11 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
           末页
         </button>
       </div>
@@ -86,6 +102,9 @@
     <PaperDrawer
       v-model:open="drawerOpen"
       :paper="selectedPaper"
+      :loading-mark="loadingMark.has(selectedPaper?.DOI)"
+      :loading-retranslate="loadingRetranslate.has(selectedPaper?.DOI)"
+      :loading-delete="loadingDelete.has(selectedPaper?.DOI)"
       @toggle-mark="toggleMark"
       @retranslate="retranslatePaper"
       @delete="deletePaper"
@@ -119,13 +138,21 @@ const loading = ref(false)
 const selectedPaper = ref({})
 const drawerOpen = ref(false)
 
+// 按钮加载状态（按 DOI 记录）
+const loadingMark = ref(new Set())
+const loadingRetranslate = ref(new Set())
+const loadingDelete = ref(new Set())
+
 // 筛选状态
 const searchQuery = ref('')
 const filterStars = ref('0')
 const filterMarked = ref(false)
 const filterComment = ref('all')
 const showPushed = ref(true)
-const filterDateStart = ref('')
+// 默认只显示最近一个月的论文
+const oneMonthAgo = new Date()
+oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+const filterDateStart = ref(oneMonthAgo.toISOString().slice(0, 10))
 const filterDateEnd = ref('')
 const useConfirmedFilters = ref(false)
 
@@ -136,6 +163,17 @@ const totalCount = ref(0)
 
 const totalPages = computed(() => {
   return Math.ceil(totalCount.value / pageSize.value)
+})
+
+const hasActiveFilters = computed(() => {
+  return !!searchQuery.value ||
+    filterStars.value !== '0' ||
+    filterMarked.value ||
+    filterComment.value !== 'all' ||
+    !showPushed.value ||
+    !!filterDateStart.value ||
+    !!filterDateEnd.value ||
+    useConfirmedFilters.value
 })
 
 // 获取论文列表
@@ -209,6 +247,20 @@ const goToPage = async (page) => {
   }
 }
 
+// 重置筛选
+const resetFilters = async () => {
+  searchQuery.value = ''
+  filterStars.value = '0'
+  filterMarked.value = false
+  filterComment.value = 'all'
+  showPushed.value = true
+  filterDateStart.value = ''
+  filterDateEnd.value = ''
+  useConfirmedFilters.value = false
+  currentPage.value = 1
+  await fetchPapers()
+}
+
 // 打开抽屉
 const openDrawer = (paper) => {
   selectedPaper.value = paper
@@ -217,8 +269,9 @@ const openDrawer = (paper) => {
 
 // 标记/取消标记
 const toggleMark = async (paper) => {
+  if (loadingMark.value.has(paper.DOI)) return
+  loadingMark.value.add(paper.DOI)
   const newStatus = !paper.is_marked
-  // 乐观更新
   paper.is_marked = newStatus
 
   try {
@@ -228,8 +281,10 @@ const toggleMark = async (paper) => {
     }
     showToast(newStatus ? '已标记' : '已取消标记')
   } catch (e) {
-    paper.is_marked = !newStatus // 回滚
+    paper.is_marked = !newStatus
     showToast('操作失败', 'error')
+  } finally {
+    loadingMark.value.delete(paper.DOI)
   }
 }
 
@@ -251,6 +306,7 @@ const updateComment = async (paper, comment) => {
 
 // 删除论文
 const deletePaper = async (paper) => {
+  if (loadingDelete.value.has(paper.DOI)) return
   try {
     await ElMessageBox.confirm(
       `确定要删除论文《${paper.TitleCN || paper.Title}》吗？`,
@@ -258,13 +314,13 @@ const deletePaper = async (paper) => {
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )
   } catch {
-    return // 用户取消
+    return
   }
 
+  loadingDelete.value.add(paper.DOI)
   try {
     const res = await deletePaperApi(paper.DOI)
     if (res.data?.success) {
-      // 从列表中移除
       papers.value = papers.value.filter(p => p.DOI !== paper.DOI)
       drawerOpen.value = false
       showToast('论文已删除')
@@ -273,11 +329,15 @@ const deletePaper = async (paper) => {
     }
   } catch (e) {
     showToast('删除失败', 'error')
+  } finally {
+    loadingDelete.value.delete(paper.DOI)
   }
 }
 
 // 重新翻译
 const retranslatePaper = async (paper) => {
+  if (loadingRetranslate.value.has(paper.DOI)) return
+  loadingRetranslate.value.add(paper.DOI)
   try {
     showToast('正在重新翻译...', 'info')
     const res = await retranslatePaperApi(paper.DOI)
@@ -290,6 +350,8 @@ const retranslatePaper = async (paper) => {
     }
   } catch (e) {
     showToast('翻译失败', 'error')
+  } finally {
+    loadingRetranslate.value.delete(paper.DOI)
   }
 }
 

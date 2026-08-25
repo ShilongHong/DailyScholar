@@ -18,7 +18,7 @@
           <div v-for="n in 7" :key="n" class="flex-1 h-2 rounded-full transition-all duration-300"
             :class="n < wizardStep ? 'bg-green-400' : n === wizardStep ? 'bg-primary' : 'bg-gray-200'"></div>
         </div>
-        <div class="flex mt-2 gap-1">
+        <div class="hidden sm:flex mt-2 gap-1">
           <div v-for="(name, idx) in wizardStepNames" :key="idx" class="flex-1 text-center text-xs"
             :class="idx + 1 <= wizardStep ? 'text-primary font-medium' : 'text-gray-400'">
             {{ name }}
@@ -61,16 +61,16 @@
                   </span>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-2">
-                  <button @click="wizardStep = 7"
-                    class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                  <button type="button" @click="wizardStep = 7"
+                    class="flex-1 min-h-11 px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
                     <i class="ph ph-check-circle"></i> 使用现有配置
                   </button>
-                  <button @click="wizardStep = 2"
-                    class="flex-1 px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
+                  <button type="button" @click="wizardStep = 2"
+                    class="flex-1 min-h-11 px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
                     <i class="ph ph-pencil-simple"></i> 查看并修改
                   </button>
-                  <button @click="resetWizardData"
-                    class="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+                  <button type="button" @click="resetWizardData"
+                    class="min-h-11 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                     清空重配
                   </button>
                 </div>
@@ -78,7 +78,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
               <i class="ph ph-download-simple text-2xl text-blue-600 mb-2"></i>
               <h4 class="font-semibold text-gray-800 text-sm">自动获取</h4>
@@ -113,8 +113,8 @@
           <!-- 数据库类型选择 -->
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-3">数据库类型</label>
-            <div class="grid grid-cols-2 gap-3">
-              <button @click="wizardData.db.db_type = 'sqlite'; wizardTestResults.db = null;"
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button type="button" @click="wizardData.db.db_type = 'sqlite'; wizardTestResults.db = null;"
                 :class="['p-4 border-2 rounded-xl flex items-center gap-3 transition-all',
                   wizardData.db.db_type === 'sqlite' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300']">
                 <div class="w-10 h-10 rounded-lg flex items-center justify-center"
@@ -126,7 +126,7 @@
                   <div class="text-xs text-gray-500">轻量级，无需安装</div>
                 </div>
               </button>
-              <button @click="wizardData.db.db_type = 'mysql'; wizardTestResults.db = null;"
+              <button type="button" @click="wizardData.db.db_type = 'mysql'; wizardTestResults.db = null;"
                 :class="['p-4 border-2 rounded-xl flex items-center gap-3 transition-all',
                   wizardData.db.db_type === 'mysql' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300']">
                 <div class="w-10 h-10 rounded-lg flex items-center justify-center"
@@ -154,8 +154,8 @@
 
           <!-- MySQL 配置 -->
           <div v-if="wizardData.db.db_type === 'mysql'" class="space-y-4">
-            <div class="grid grid-cols-3 gap-4">
-              <div class="col-span-2">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="sm:col-span-2">
                 <label class="block text-sm font-medium text-gray-700 mb-1">主机地址</label>
                 <input type="text" v-model="wizardData.db.host" placeholder="例如: localhost 或 192.168.1.100"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
@@ -166,7 +166,7 @@
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
               </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
                 <input type="text" v-model="wizardData.db.user" placeholder="例如: root"
@@ -190,8 +190,8 @@
 
           <!-- 测试连接按钮（仅 MySQL 模式显示） -->
           <div v-if="wizardData.db.db_type === 'mysql'" class="mt-6 flex items-center gap-4">
-            <button @click="handleTestDBConnection" :disabled="wizardTesting"
-              class="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+            <button type="button" @click="handleTestDBConnection" :disabled="wizardTesting"
+              class="min-h-11 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2">
               <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-plugs-connected'" class="text-lg"></i>
               {{ wizardTesting ? '测试中...' : '测试连接' }}
             </button>
@@ -257,8 +257,8 @@
 
           <!-- 测试API按钮 -->
           <div class="mt-6 flex items-center gap-4">
-            <button @click="handleTestLLMConnection" :disabled="wizardTesting"
-              class="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+            <button type="button" @click="handleTestLLMConnection" :disabled="wizardTesting"
+              class="min-h-11 px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-2">
               <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-flask'" class="text-lg"></i>
               {{ wizardTesting ? '测试中...' : '测试 API' }}
             </button>
@@ -287,12 +287,12 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">
               <i class="ph ph-magic-wand text-purple-600"></i> 一句话描述您的研究方向
             </label>
-            <div class="flex gap-2">
+            <div class="flex flex-col sm:flex-row gap-2">
               <input type="text" v-model="researchBrief"
                 placeholder="例如：我的研究方向是多模态大模型在医疗影像中的应用"
-                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 text-sm">
-              <button @click="handleGenerateResearch" :disabled="generatingResearch || !researchBrief"
-                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm whitespace-nowrap">
+                class="flex-1 min-h-11 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 text-sm">
+              <button type="button" @click="handleGenerateResearch" :disabled="generatingResearch || !researchBrief"
+                class="min-h-11 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm whitespace-nowrap">
                 <i class="ph ph-sparkle"></i>
                 <span v-if="generatingResearch">生成中...</span>
                 <span v-else>AI 生成</span>
@@ -439,6 +439,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-3">常用分类（点击切换）</label>
             <div class="flex flex-wrap gap-2">
               <button v-for="cat in arxivCategories" :key="cat.code"
+                type="button"
                 @click="toggleArxivCategory(cat.code)"
                 :class="['px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
                   wizardData.arxiv.keywords.includes(cat.code)
@@ -456,7 +457,7 @@
               <span v-for="(kw, idx) in wizardData.arxiv.keywords" :key="idx"
                 class="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-sm rounded-full">
                 {{ kw }}
-                <button @click="removeArxivKeyword(idx)" class="hover:text-red-500 transition-colors">
+                <button type="button" @click="removeArxivKeyword(idx)" class="hover:text-red-500 transition-colors" :aria-label="`移除 ${kw}`">
                   <i class="ph ph-x text-xs"></i>
                 </button>
               </span>
@@ -465,10 +466,10 @@
           </div>
 
           <!-- 自定义关键词输入 -->
-          <div class="flex gap-2 mb-6">
+          <div class="flex flex-col sm:flex-row gap-2 mb-6">
             <input type="text" v-model="wizardNewKeyword" @keyup.enter="addArxivKeyword()" placeholder="例如: cs.CL、cat:cs.AI、large language model"
-              class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
-            <button @click="addArxivKeyword()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+              class="flex-1 min-h-11 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm">
+            <button type="button" @click="addArxivKeyword()" class="min-h-11 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
               <i class="ph ph-plus"></i> 添加
             </button>
           </div>
@@ -530,8 +531,8 @@
 
           <!-- 测试通知按钮 -->
           <div class="mt-6 flex items-center gap-4">
-            <button @click="handleTestNotifyChannel" :disabled="wizardTesting"
-              class="px-5 py-2.5 bg-pink-600 text-white rounded-lg text-sm font-medium hover:bg-pink-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+            <button type="button" @click="handleTestNotifyChannel" :disabled="wizardTesting"
+              class="min-h-11 px-5 py-2.5 bg-pink-600 text-white rounded-lg text-sm font-medium hover:bg-pink-700 disabled:opacity-50 transition-colors flex items-center gap-2">
               <i :class="wizardTesting ? 'ph ph-spinner animate-spin' : 'ph ph-paper-plane-right'" class="text-lg"></i>
               {{ wizardTesting ? '测试中...' : '测试通知' }}
             </button>
@@ -711,20 +712,20 @@
       </div>
 
       <!-- 向导底部按钮 -->
-      <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+      <div class="px-4 md:px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
         <div>
-          <button v-if="wizardStep > 1" @click="prevWizardStep"
-            class="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
+          <button v-if="wizardStep > 1" type="button" @click="prevWizardStep"
+            class="min-h-11 px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
             <i class="ph ph-arrow-left"></i> 上一步
           </button>
         </div>
         <div class="flex items-center gap-3">
-          <button v-if="wizardStep > 1 && wizardStep < 7" @click="skipWizardStep"
-            class="px-4 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors">
+          <button v-if="wizardStep > 1 && wizardStep < 7" type="button" @click="skipWizardStep"
+            class="min-h-11 px-4 py-2 text-gray-500 text-sm hover:text-gray-700 transition-colors">
             跳过
           </button>
-          <button @click="handleNextWizardStep"
-            :class="['px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm',
+          <button type="button" @click="handleNextWizardStep"
+            :class="['min-h-11 px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm',
               wizardStep === 7
                 ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/30'
                 : 'bg-primary text-white hover:bg-primary/90 shadow-primary/30']">

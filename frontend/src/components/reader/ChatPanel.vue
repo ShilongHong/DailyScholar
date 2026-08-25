@@ -7,8 +7,9 @@
         <button
           v-for="(s, i) in suggestions"
           :key="i"
+          type="button"
           @click="sendSuggestion(s)"
-          class="w-full text-left px-3 py-2 text-xs rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-primary/5 text-gray-600 hover:text-primary transition-colors"
+          class="w-full min-h-11 text-left px-3 py-2 text-xs rounded-lg border border-gray-200 hover:border-primary/30 hover:bg-primary/5 text-gray-600 hover:text-primary transition-colors"
         >
           <i class="ph ph-lightbulb mr-1 text-primary/60"></i>{{ s }}
         </button>
@@ -38,34 +39,40 @@
       <!-- 错误提示 -->
       <div v-if="error" class="text-center py-2">
         <p class="text-xs text-red-400">{{ error }}</p>
-        <button @click="error = ''" class="text-xs text-gray-400 hover:text-gray-600 mt-1">关闭</button>
+        <button type="button" @click="error = ''" class="min-h-11 px-3 text-xs text-gray-400 hover:text-gray-600 mt-1">关闭</button>
       </div>
     </div>
 
     <!-- 输入区 -->
     <div class="flex gap-2 pt-2 mt-2 border-t border-gray-100 shrink-0 bg-white sticky bottom-0 z-10">
       <input
+        id="chat-question-input"
         ref="inputRef"
         v-model="inputText"
         @keyup.enter="send"
         :disabled="streaming"
         type="text"
         placeholder="输入问题，深入理解这篇论文..."
-        class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-xs focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+        aria-label="输入论文精读问题"
+        class="flex-1 min-h-11 px-3 py-2 border border-gray-200 rounded-lg text-xs focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none disabled:bg-gray-50 disabled:text-gray-400"
       />
       <button
+        type="button"
         @click="send"
         :disabled="streaming || !inputText.trim()"
-        class="px-3 py-2 bg-primary text-white rounded-lg text-xs hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        aria-label="发送问题"
+        class="min-h-11 min-w-11 px-3 py-2 bg-primary text-white rounded-lg text-xs hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
       >
         <i class="ph ph-paper-plane-tilt"></i>
       </button>
       <button
         v-if="messages.length > 0"
+        type="button"
         @click="clearAll"
         :disabled="streaming"
-        class="px-2 py-2 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40 shrink-0"
+        class="min-h-11 min-w-11 px-2 py-2 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40 shrink-0"
         title="清空对话"
+        aria-label="清空对话"
       >
         <i class="ph ph-trash text-xs"></i>
       </button>
